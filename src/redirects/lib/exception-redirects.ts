@@ -2,8 +2,7 @@ import fs from 'fs'
 
 type Redirects = Record<string, string>
 
-// Exception redirect files use bare destinations followed by - source lines.
-// Lines starting with # are comments.
+// This function expects a .txt file in a specific format.
 export default function getExceptionRedirects(exceptionsTxtFile: string): Redirects {
   const exceptions: Redirects = {}
   const exceptionRedirectsLines = fs

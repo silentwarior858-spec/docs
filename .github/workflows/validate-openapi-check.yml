@@ -1,6 +1,8 @@
 name: Validate OpenAPI Check Docker
 
-# Tests the OpenAPI check Dockerfile and script before related changes merge.
+# **What it does**: Tests building and running the OpenAPI check Docker container
+# **Why we have it**: To ensure the Dockerfile and openapi-check script work correctly
+# **Who does it impact**: Docs engineering.
 
 on:
   workflow_dispatch:
@@ -14,7 +16,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
-      # Re-run this workflow when its own definition changes.
+      # Self-test
       - '.github/workflows/validate-openapi-check.yml'
 
 permissions:

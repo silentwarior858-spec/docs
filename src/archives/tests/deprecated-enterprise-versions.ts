@@ -79,19 +79,21 @@ describe('enterprise deprecation', () => {
 
     const { $: $2, res } = await getDOM(`${guidesPath}/${firstLink}`)
     expect(res.statusCode).toBe(200)
-    // The test follows the first link, which is the Installation guide.
+    // this test assumes the Installation guide is the first link on the guides page
     expect($2('h2').text()).toBe('Installing and configuring GitHub Enterprise')
   })
 })
 
-// Enterprise 3.0 redirects use getRedirect plus redirects.json instead of a static object.
+// Starting with the deprecation of 3.0, it's the first time we deprecate
+// enterprise versions since redirects is a *function* rather than a
+// lookup in a big object.
 describe('recently deprecated redirects', () => {
   test('basic enterprise 3.0 redirects', async () => {
     const res = await get('/enterprise/3.0')
     expect(res.statusCode).toBe(302)
     expect(res.headers.location).toBe('/en/enterprise-server@3.0')
     expect(res.headers['set-cookie']).toBeUndefined()
-    // Language-specific redirects vary by language headers.
+    // language specific caching
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
     expect(res.headers.vary).toContain('accept-language')
@@ -102,7 +104,7 @@ describe('recently deprecated redirects', () => {
     const res = await get('/en/enterprise/3.0')
     expect(res.statusCode).toBe(301)
     expect(res.headers.location).toBe('/en/enterprise-server@3.0')
-    // 301 redirects can cache aggressively.
+    // 301 redirects are safe to cache aggressively
     expect(res.headers['set-cookie']).toBeUndefined()
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
@@ -114,12 +116,13 @@ describe('recently deprecated redirects', () => {
     )
     expect(res.statusCode).toBe(302)
     expect(res.headers['set-cookie']).toBeUndefined()
-    // Language-specific redirects vary by language headers.
+    // language specific caching
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
     expect(res.headers.vary).toContain('accept-language')
     expect(res.headers.vary).toContain('x-user-language')
-    // Matches https://github.com/github/docs-ghes-3.0/blob/main/redirects.json.
+    // This is based on
+    // https://github.com/github/docs-ghes-3.0/blob/main/redirects.json
     expect(res.headers.location).toBe(
       '/en/enterprise-server@3.0/get-started/learning-about-github/githubs-products',
     )

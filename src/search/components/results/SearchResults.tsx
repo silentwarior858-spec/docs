@@ -2,7 +2,7 @@ import { Heading, Pagination, Text, Token } from '@primer/react-brand'
 import { SearchIcon } from '@primer/octicons-react'
 import { useRouter } from 'next/router'
 import React, { useEffect, useRef, useState } from 'react'
-import cx from 'clsx'
+import cx from 'classnames'
 
 import { useTranslation } from '@/languages/components/useTranslation'
 import { Link } from '@/frame/components/Link'
@@ -82,8 +82,6 @@ function NoSearchResults() {
   )
 }
 
-// A hit carries one toplevel, so the design's +N chip needs a real topics array indexed first.
-// The chip stays a span because every anchor inside a result needs the versioned pathname.
 function SearchResultHit({
   hit,
   query,
@@ -109,6 +107,10 @@ function SearchResultHit({
     content = hit.highlights.content[0]
   }
 
+  // The title, category chip, snippet and debug line are all *direct* children of the grid
+  // root on purpose. Wrapping the title and chip in a flex row would make that wrapper the
+  // first <div> in the result, and src/search/tests/rendering.ts reads a <div> inside the
+  // result to assert the highlighted snippet.
   return (
     <div className={cx(styles.searchResult, styles.search_result)} data-testid="search-result">
       <Heading as="h2" size="subhead-medium" className={styles.resultTitle}>
@@ -132,6 +134,12 @@ function SearchResultHit({
           {renderHTMLString(title, markdownComponents)}
         </Link>
       </Heading>
+      {/*
+        A hit carries exactly one `toplevel`, so this is deliberately a single chip; the "+N"
+        overflow chip in the design needs a real `topics` array indexed first. Rendered as a
+        span and never an anchor, because every <a> inside a result must carry the versioned
+        pathname (asserted in src/search/tests/rendering.ts).
+      */}
       {hit.toplevel && (
         <Token
           className={styles.resultTopic}

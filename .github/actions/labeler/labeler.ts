@@ -1,3 +1,5 @@
+/* See function main in this file for documentation */
+
 import * as coreLib from '@actions/core'
 import { type Octokit } from '@octokit/rest'
 import { CoreInject } from '@/links/scripts/action-injections'
@@ -16,7 +18,7 @@ type Options = {
   repo?: string
 }
 
-// Run action wiring only for direct execution, not imports from tests or other code.
+// When this file is invoked directly from action as opposed to being imported
 if (import.meta.url.endsWith(process.argv[1])) {
   if (!process.env.GITHUB_TOKEN) {
     throw new Error('You must set the GITHUB_TOKEN environment variable.')
@@ -31,7 +33,7 @@ if (import.meta.url.endsWith(process.argv[1])) {
     ignoreIfLabeled: boolEnvVar('IGNORE_IF_LABELED'),
   }
 
-  // Actions pass comma-separated labels.
+  // labels come in comma separated from actions
   if (typeof ADD_LABELS === 'string') {
     opts.addLabels = [...ADD_LABELS.split(',')].map((l) => l.trim())
   } else {
@@ -58,6 +60,18 @@ if (import.meta.url.endsWith(process.argv[1])) {
   main(coreLib, octokit, opts)
 }
 
+/*
+ * Applies labels to an issue or pull request.
+ *
+ * opts:
+ *  issue_number {number} id of the issue or pull request to label
+ *  owner {string} owner of the repository
+ *  repo {string} repository name
+ *  addLabels {Array<string>} array of labels to apply
+ *  removeLabels {Array<string>} array of labels to remove
+ *  ignoreIfAssigned {boolean} don't apply labels if there are assignees
+ *  ignoreIfLabeled {boolean} don't apply labels if there are already labels added
+ */
 export default async function main(
   core: typeof coreLib | CoreInject,
   octokit: Octokit,
@@ -104,7 +118,7 @@ export default async function main(
   }
 
   if (opts.removeLabels?.length) {
-    // Remove only applied labels because the API rejects missing labels.
+    // removing a label fails if the label isn't already applied
     let appliedLabels = []
 
     try {

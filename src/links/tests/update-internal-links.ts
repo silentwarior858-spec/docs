@@ -17,15 +17,16 @@ versions:
 Body text with a [link](/en/old-path).
 `
 
-// These fixtures parse as YAML, so content exists and tests can use this narrower type.
+// `frontmatter()` only omits `content` when the YAML fails to parse, which none of
+// these fixtures do. Narrow it once here so each test can stay readable.
 function parse(raw: string): { content: string; data: Record<string, unknown> } {
   const { content, data } = frontmatter(raw)
   if (content === undefined) throw new Error('fixture failed to parse')
   return { content, data: data || {} }
 }
 
-// serializeMarkdown depends on gray-matter content being an exact suffix of the raw file.
-// Test the real parser, not a hand-rolled stand-in.
+// The whole fix rests on gray-matter's `content` being an exact suffix of the raw file.
+// Test that against the real parser, not a hand-rolled stand-in.
 describe('frontmatter parse invariant', () => {
   const cases: [string, string][] = [
     ['standard page', PAGE],
@@ -70,7 +71,7 @@ describe('serializeMarkdown', () => {
 
     expect(result).toContain('/en/new-path')
     expect(result).not.toContain('/en/old-path')
-    // Single-quoted intro and list-style redirect_from must survive untouched.
+    // The single-quoted intro and the list-style redirect_from must survive untouched.
     expect(result).toContain(
       "intro: 'You can allow contributors with push access to merge their pull requests",
     )

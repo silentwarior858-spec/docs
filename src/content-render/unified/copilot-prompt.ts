@@ -1,3 +1,7 @@
+/**
+ * Adds a runnable prompt button in the header of Copilot Chat blocks.
+ */
+
 import { find } from 'unist-util-find'
 import { h } from 'hastscript'
 import octicons from '@primer/octicons'
@@ -20,7 +24,7 @@ export function getPrompt(
 
   const { promptContent, ariaLabel } = buildPromptData(node, tree, code)
   const promptLink = `https://github.com/copilot?prompt=${encodeURIComponent(promptContent.trim())}`
-  // Murmur keeps the prompt ID deterministic and avoids hydration mismatches.
+  // Use murmur hash for deterministic ID (avoids hydration mismatch)
   const promptId: string = generatePromptId(promptContent)
 
   const element = h(
@@ -43,20 +47,21 @@ function buildPromptData(
   tree: Root,
   code: string,
 ): { promptContent: string; ariaLabel: string } {
+  // Find a ref meta in the format 'ref=<id>'
   const ref = getPreMeta(node).ref
 
   if (!ref) {
-    // Without ref metadata, the prompt has no extra code context.
+    // If no 'ref=<id>' meta is found, use just the current code for the prompt link.
     return promptOnly(code)
   }
 
-  // ref metadata points to a code block that becomes prompt context.
+  // If the 'ref=<id>' meta is found, find a matching code block to include as context in the prompt link.
   const matchingCodeEl = findMatchingCode(ref as string, tree)
   if (!matchingCodeEl) {
     logger.warn('Cannot find referenced code block', { ref })
     return promptOnly(code)
   }
-  // HAST nests fenced code text at element, code, then text.
+  // AST structure: element -> code -> text node with value property
   const codeChild = matchingCodeEl.children[0] as Element | undefined
   const textNode = codeChild?.children[0] as { value?: string } | undefined
   const matchingCode = textNode?.value || null

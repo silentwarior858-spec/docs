@@ -28,7 +28,18 @@ describe('buildMiniTocFromCollected', () => {
     expect(tocItems[0].items?.length).toBe(3)
   })
 
-  // /en/rest/reference/apps begins with unnested levels 3, 3, then continues 2, 3, 2, 3.
+  /**
+   * Mock scenario from: /en/rest/reference/apps
+   * The TOC starts out with lower importance headers that aren't nested in
+   * higher importance headers
+   *
+   *     3
+   *     3
+   *   2
+   *     3
+   *   2
+   *     3
+   */
   test('creates toc that starts with lower importance headers', () => {
     const collected = [
       heading('section-1-A', 3),
@@ -43,7 +54,8 @@ describe('buildMiniTocFromCollected', () => {
     expect(tocItems[3].items?.length).toBe(1)
   })
 
-  // Scenario from: /en/organizations/managing-membership-in-your-organization/inviting-users-to-join-your-organization
+  // Mock scenario from:
+  // /en/organizations/managing-membership-in-your-organization/inviting-users-to-join-your-organization
   test('creates empty toc', () => {
     const tocItems = buildMiniTocFromCollected([], 3)
     expect(tocItems.length).toBe(0)

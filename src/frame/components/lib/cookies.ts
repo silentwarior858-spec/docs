@@ -1,6 +1,7 @@
 import Cookies from 'js-cookie'
 
-// js-cookie reads document, so server rendering gets a no-op mock.
+// This library only works client side,
+// so on the server side we return a mock.
 export default typeof document === 'undefined'
   ? {
       get: () => undefined,

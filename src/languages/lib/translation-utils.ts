@@ -2,8 +2,10 @@ import type { UIStrings } from '@/frame/components/context/MainContext'
 
 class UngettableError extends Error {}
 
-// Missing namespace fallbacks keep localized 404 pages rendering when CJK or
-// Cyrillic UI data omits expected keys.
+/**
+ * Generic translation function that works with both client and server components
+ * With error handling for missing namespaces in CJK/Cyrillic languages
+ */
 export function createTranslationFunctions(uiData: UIStrings, namespaces: string | Array<string>) {
   const namespacesArray = Array.isArray(namespaces) ? namespaces : [namespaces]
 
@@ -20,7 +22,7 @@ export function createTranslationFunctions(uiData: UIStrings, namespaces: string
         `Available namespaces: ${Object.keys(uiData).sort().join(', ')}`,
     )
 
-    // 404 pages use fallback meta strings instead of throwing.
+    // For 404 pages, we can't afford to throw errors; create defensive fallbacks
     if (missingNamespaces.includes('meta')) {
       console.warn('Creating fallback meta namespace for 404 page rendering')
       uiData = {
@@ -32,7 +34,7 @@ export function createTranslationFunctions(uiData: UIStrings, namespaces: string
       } as UIStrings
     }
 
-    // Create empty fallback namespaces for any remaining missing data.
+    // Still missing critical namespaces? Create minimal fallbacks
     for (const namespace of missingNamespaces) {
       if (!(namespace in uiData)) {
         uiData = {
@@ -45,9 +47,10 @@ export function createTranslationFunctions(uiData: UIStrings, namespaces: string
 
   function carefulGetWrapper(path: string, fallback?: string) {
     try {
+      // Try each namespace in order
       for (const namespace of namespacesArray) {
         if (!(namespace in uiData)) {
-          continue
+          continue // Skip missing namespaces
         }
         const deeper = uiData[namespace]
         if (typeof deeper === 'string') {
@@ -62,10 +65,10 @@ export function createTranslationFunctions(uiData: UIStrings, namespaces: string
         }
       }
 
-      // Search full UI data so callers can pass already-qualified keys.
+      // Fallback to searching the full UI data
       return carefulGet(uiData, path)
     } catch {
-      // Return a fallback string so translation failures do not break rendering.
+      // Never let translation failures break the app
       const finalFallback = fallback || path.split('.').pop() || 'Missing translation'
       console.warn(
         `Translation completely failed for "${path}", using fallback: "${finalFallback}"`,
@@ -86,7 +89,7 @@ export function createTranslationFunctions(uiData: UIStrings, namespaces: string
     },
     t: (strings: TemplateStringsArray | string, ...values: Array<unknown>) => {
       const key = typeof strings === 'string' ? strings : String.raw(strings, ...values)
-      // 404 pages need these labels even when UI data is missing.
+      // Provide specific fallbacks for common 404 page keys
       const commonFallbacks: Record<string, string> = {
         oops: 'Ooops!',
         github_docs: 'GitHub Docs',
@@ -97,8 +100,12 @@ export function createTranslationFunctions(uiData: UIStrings, namespaces: string
   }
 }
 
-// App Router pages can render with partial UI data, so server translations return fallbacks.
+/**
+ * Server-side translation function for App Router pages
+ * Enhanced with better error handling for missing keys and defensive fallbacks
+ */
 export function translate(uiData: UIStrings, key: string, fallback?: string): string {
+  // Defensive check for completely missing data
   if (!uiData || typeof uiData !== 'object') {
     console.warn(`UI data is missing or corrupted for key "${key}", using fallback`)
     return getCommonFallback(key, fallback)
@@ -109,6 +116,7 @@ export function translate(uiData: UIStrings, key: string, fallback?: string): st
   } catch (error) {
     const finalFallback = getCommonFallback(key, fallback)
 
+    // Only warn in development
     if (process.env.NODE_ENV === 'development') {
       console.warn(
         `Server translation failed for "${key}":`,
@@ -121,6 +129,9 @@ export function translate(uiData: UIStrings, key: string, fallback?: string): st
   }
 }
 
+/**
+ * Get common fallback values for essential UI keys
+ */
 function getCommonFallback(key: string, providedFallback?: string): string {
   const commonFallbacks: Record<string, string> = {
     'meta.oops': 'Ooops!',

@@ -26,7 +26,7 @@ describe('manifest', () => {
     const res = await get(url)
     expect(res.statusCode).toBe(200)
 
-    // CDN caching must not set cookies and must include the no-language surrogate key.
+    // Check that it can be cached at the CDN
     expect(res.headers['set-cookie']).toBeUndefined()
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
@@ -45,7 +45,7 @@ describe('manifest', () => {
         const iconRes = await get(icon.src, { responseType: 'buffer' })
         expect(iconRes.statusCode).toBe(200)
         expect(iconRes.headers['content-type']).toBe(icon.type)
-        // sizes must match the image payload.
+        // The `sizes` should match the payload
         const image = sharp(iconRes.body)
         const [width, height] = icon.sizes.split('x').map((s) => parseInt(s))
         const dimensions = await image.metadata()

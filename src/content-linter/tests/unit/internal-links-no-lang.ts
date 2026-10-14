@@ -24,11 +24,12 @@ describe(internalLinksNoLang.names.join(' - '), () => {
   })
   test('internal links with no hardcoded language codes pass', async () => {
     const markdown = [
-      // The internal-links-slash rule owns relative links without a slash.
+      // This is caught by the internal-links-slashes rule
       '[Internal Link Fail Docs](en/docs)',
-      // Protocol-relative URLs count as external links.
+      // a // means the link is external
       'These are the [Docs](//ja/actions) we need.',
       'This is the [actions Docs](/actions)',
+      // A link that starts with a language code
       '[Enterprise](/enterprise/overview)',
     ].join('\n')
     const result = await runRule(internalLinksNoLang as Rule, { strings: { markdown } })

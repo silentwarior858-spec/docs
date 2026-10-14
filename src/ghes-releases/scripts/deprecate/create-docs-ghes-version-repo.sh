@@ -1,15 +1,13 @@
-#!/usr/bin/env bash
+# This script creates a new repository for an archived version of GitHub Enterprise Server documentation.
+# Please update the version variable first.
+# You may wish to run this script a little bit at a time instead of all at once incase there are any errors.
 
-# Creates a repository for an archived GitHub Enterprise Server documentation version.
-# Pass the version as the first argument, and run sections one at a time when inspecting failures.
-
-set -euo pipefail
-
-version=${1:?Pass the GHES version, for example 3.17}
+version=$1
 cd ~/Documents/gh/github
 
-# Numeric team IDs survive team renames; slugs do not.
-# Repo creation, CODEOWNERS, and custom properties require slugs, so resolve current slugs.
+# Teams are addressed by numeric ID because IDs survive team renames and slugs do not.
+# Some APIs (repo creation, CODEOWNERS, custom properties) only accept slugs, so
+# resolve the current slug from the ID at runtime rather than hardcoding it.
 org_id=9919
 docs_team_id=325922
 docs_eng_team_id=3935808
@@ -74,14 +72,7 @@ gh api -X POST "/repos/github/docs-ghes-$version/rulesets" --input - --silent <<
 RULESET
 echo "--- Enable GitHub Pages, set source to main in root directory, and make the pages site public"
 gh api -X POST "/repos/github/docs-ghes-$version/pages" \
-  -f "source[branch]=main" -f "source[path]=/" --silent
-# The create endpoint has no public parameter, so set visibility with the update endpoint.
-gh api -X PUT "/repos/github/docs-ghes-$version/pages" -F "public=true" --silent
-pages_public=$(gh api "/repos/github/docs-ghes-$version/pages" --jq .public)
-if [ "$pages_public" != "true" ]; then
-  echo "GitHub Pages is not public. Run: gh api -X PUT /repos/github/docs-ghes-$version/pages -F public=true"
-  exit 1
-fi
+  -f "source[branch]=main" -f "source[path]=/" -F "public=true" --silent
 echo "--- Update custom properties"
 gh api --method PATCH /repos/github/docs-ghes-$version/properties/values \
   -f "properties[][property_name]=ownership-name" \

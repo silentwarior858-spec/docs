@@ -20,6 +20,7 @@ export const frontmatterDocsTeamMetrics = {
 
     const filePath = params.name
 
+    // Determine which path-enforced metrics values match this file's path.
     const expectedValues = PATH_ENFORCED_METRICS.filter((value) => filePath.includes(value))
     if (expectedValues.length === 0) return
 
@@ -28,7 +29,7 @@ export const frontmatterDocsTeamMetrics = {
     const missingValues = expectedValues.filter((v) => !currentValues.includes(v))
     if (missingValues.length === 0) return
 
-    // Missing docsTeamMetrics has no source line, so report at the frontmatter start.
+    // Report on the first line of frontmatter (the opening ---)
     addError(
       onError,
       1,

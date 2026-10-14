@@ -1,4 +1,5 @@
-// SharedUIContext carries UI state where passing it through the component tree is impractical.
+// For places where we might need to know the "state" of one component from another component
+// Useful for when the inheritance between the two components is too complicated for passing down props, or they aren't in the same tree
 
 import React, { createContext, useContext, useState } from 'react'
 

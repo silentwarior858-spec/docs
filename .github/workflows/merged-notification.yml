@@ -1,9 +1,11 @@
 name: Merged notification
 
-# docs-internal deploys docs, so merged public PRs need a production timing notice.
+# **What it does**: When we merge an open-source pull request, we want to set expectations that deployment may take awhile.
+# **Why we have it**: We deploy to production from docs-internal, not docs.
+# **Who does it impact**: Open-source contributors.
 
 on:
-  # pull_request_target lets this workflow comment on pull requests from forks.
+  # Needed in lieu of `pull_request` so that the notification comment is posted to a PR from a fork.
   pull_request_target:
     types:
       - 'closed'

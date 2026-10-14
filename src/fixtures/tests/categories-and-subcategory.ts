@@ -12,10 +12,12 @@ describe('subcategories', () => {
 
     const links = $('[data-testid=table-of-contents] a[href]')
     expect(links.length).toBeGreaterThan(0)
+    // They all have the same prefix
     const hrefs = links.map((i: number, el: Element) => $(el).attr('href')).get()
     expect(
       hrefs.every((href: string) => href.startsWith('/en/get-started/start-your-journey/')),
     ).toBeTruthy()
+    // The all resolve to a 200 OK without redirects
     const responses = await Promise.all(hrefs.map((href: string) => head(href)))
     expect(responses.every((r: { statusCode: number }) => r.statusCode === 200)).toBeTruthy()
   })
@@ -33,7 +35,7 @@ describe('subcategories', () => {
     expect(firstArticleH2.text()).toMatch('Article title')
 
     const firstArticleIntro = $('[data-testid=table-of-contents] p').first()
-    // The intro escapes title HTML and converts Markdown.
+    // Its HTML in the intro is escaped and Markdown converted
     expect(firstArticleIntro.html()).toMatch(
       'This page uses &lt; and &gt; in the title and <code>shortTitle</code>',
     )
@@ -48,8 +50,10 @@ describe('categories', () => {
 
     const links = $('[data-testid=table-of-contents] a[href]')
     expect(links.length).toBeGreaterThan(0)
+    // They all have the same prefix
     const hrefs = links.map((i: number, el: Element) => $(el).attr('href')).get()
     expect(hrefs.every((href: string) => href.startsWith('/en/actions/category/'))).toBeTruthy()
+    // The all resolve to a 200 OK without redirects
     const responses = await Promise.all(hrefs.map((href: string) => head(href)))
     expect(responses.every((r: { statusCode: number }) => r.statusCode === 200)).toBeTruthy()
   })

@@ -30,7 +30,9 @@ export const incorrectAltTextLength = {
         renderedString = await liquid.parseAndRender(token.content, context)
       }
 
-      // Empty alt text cannot produce a range because getRange requires a string it can find.
+      // You can't compute a range if the content is empty
+      // because getRange() would throw an error. It's because it assumes to
+      // be able to find one string in another string.
       const range = token.content ? getRange(token.line, token.content) : null
 
       if (renderedString.length < 40 || renderedString.length > 150) {

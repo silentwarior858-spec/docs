@@ -17,11 +17,12 @@ export const CategoryLanding = () => {
   const router = useRouter()
   const { title, intro, tocItems, spotlight, filters } = useCategoryLandingContext()
 
-  // Always show the category filter; filters frontmatter controls surface and complexity.
+  // The category filter is always shown. Surface and complexity are opt-in via
+  // the `filters` frontmatter array on the landing page.
   const showSurface = filters ? filters.includes('surface') : true
   const showComplexity = filters ? filters.includes('complexity') : false
 
-  // Category landing cards use only child articles, not directory nodes.
+  // tocItems contains directories and its children, we only want the child articles
   const onlyFlatItems: ArticleCardItems = tocItems.flatMap((item) => item.childTocItems || [])
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -86,6 +87,7 @@ export const CategoryLanding = () => {
     setSelectedComplexity('All')
   }
 
+  // Helper function to find article data from tocItems
   const findArticleData = (articlePath: string) => {
     const cleanPath = articlePath.startsWith('/') ? articlePath.slice(1) : articlePath
     return onlyFlatItems.find(
@@ -95,6 +97,7 @@ export const CategoryLanding = () => {
     )
   }
 
+  // Process spotlight items to get complete data
   const processedSpotlight =
     spotlight?.map((spotlightItem) => {
       const articleData = findArticleData(spotlightItem.article)
@@ -111,7 +114,8 @@ export const CategoryLanding = () => {
     <DefaultLayout>
       <UtmPreserver />
       {router.route === '/[versionId]/rest/[category]' && <RestRedirect />}
-      {/* ClientSideRedirects renders null, so placement does not affect layout. */}
+      {/* Doesn't matter *where* this is included because it will
+      never render anything. It always just return null. */}
       <ClientSideRedirects />
 
       <div className="container-xl px-3 px-md-6 my-4" data-search="article-body">

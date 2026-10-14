@@ -1,3 +1,5 @@
+// csp-parse doesn't have TypeScript types
+import CspParse from 'csp-parse'
 import { beforeAll, describe, expect, test, vi } from 'vitest'
 
 import enterpriseServerReleases from '@/versions/lib/enterprise-server-releases'
@@ -15,24 +17,13 @@ interface Category {
   published_articles: string[]
 }
 
-// Match unmaintained csp-parse: lowercase the policy, split directives on semicolons, and join
-// each directive's values with spaces. get() returns '' when a directive is absent.
-function parseCsp(policy: string) {
-  const directives = new Map<string, string>()
-  for (const part of (policy || '').toLowerCase().split(';')) {
-    const [name, ...values] = part.trim().split(/\s+/)
-    if (name) directives.set(name, values.join(' '))
-  }
-  return {
-    get: (directive: string) => directives.get(directive) || '',
-  }
-}
-
 describe('server', () => {
   vi.setConfig({ testTimeout: 60 * 1000 })
 
-  // Warm /en first so a slow first page load fails here instead of in the first test.
   beforeAll(async () => {
+    // The first page load takes a long time so let's get it out of the way in
+    // advance to call out that problem specifically rather than misleadingly
+    // attributing it to the first test
     const res = await get('/en')
     expect(res.statusCode).toBe(200)
   })
@@ -42,7 +33,9 @@ describe('server', () => {
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-length']).toBe('0')
     expect(res.body).toBe('')
-    // HEAD responses ignore Accept-Language and Cookies, so URL alone can key the public cache.
+    // Because the HEAD requests can't be different no matter what's
+    // in the request headers (Accept-Language or Cookies)
+    // it's safe to let it cache. The only key is the URL.
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=\d+/)
   })
@@ -57,7 +50,7 @@ describe('server', () => {
     expect(res.statusCode).toBe(200)
     expect('content-security-policy' in res.headers).toBe(true)
 
-    const csp = parseCsp(res.headers['content-security-policy'])
+    const csp = new CspParse(res.headers['content-security-policy'])
     expect(csp.get('default-src')).toBe("'none'")
 
     expect(csp.get('font-src').includes("'self'")).toBe(true)
@@ -109,7 +102,8 @@ describe('server', () => {
     expect(keys).toContain('product:get-started')
     expect(keys).toContain('product:get-started,language:en')
     expect(keys.some((key: string) => /^version:.+/.test(key))).toBe(true)
-    // The render key must match the purge key derived from content/get-started/index.md.
+    // Exact key, not just a pattern, to lock the render side byte-for-byte to what
+    // the purge job rebuilds from a changed file path (content/get-started/index.md).
     expect(keys).toContain('language:en,path:get-started/index.md')
     expect(keys).toContain(makePageSurrogateKey('en', 'get-started/index.md'))
     expect(keys.length).toBeLessThanOrEqual(6)
@@ -122,7 +116,8 @@ describe('server', () => {
   })
 
   test('renders a 404 page', async () => {
-    // The /en/ prefix reaches the full 404 page instead of the plain text fallback.
+    // Important to use the prefix /en/ on the failing URL or else
+    // it will render a very basic plain text 404 response.
     const $ = await getDOM('/en/not-a-real-page', { allow404: true })
     expect(($ as unknown as { text(): string }).text()).toContain('Page not found.')
     expect($.res.statusCode).toBe(404)
@@ -133,17 +128,19 @@ describe('server', () => {
     expect(res.statusCode).toBe(404)
   })
 
-  test('renders a 400 for invalid paths', async () => {
-    const res = await get('/en/%7B%')
-    expect(res.statusCode).toBe(400)
-    expect(res.headers['content-type']).toMatch('text/plain')
-    expect(res.body).toBe('Bad Request: Malformed URL')
+  // When using `got()` to send full end-to-end URLs, you can't use
+  // URLs like in this test because got will
+  // throw `RequestError: URI malformed`.
+  // So for now, this test is skipped.
+  test.skip('renders a 400 for invalid paths', async () => {
+    const $ = await getDOM('/en/%7B%')
+    expect($.res.statusCode).toBe(400)
   })
 
   test('renders a 500 page when errors are thrown', async () => {
     const $ = await getDOM('/_500', { allow500s: true })
     expect($('h1').first().text()).toBe('Ooops!')
-    // Cheerio v1 root types omit text().
+    // Using type assertion because cheerio v1 types don't include text() on root
     expect(
       ($ as unknown as { text(): string }).text().includes('It looks like something went wrong.'),
     ).toBe(true)
@@ -167,6 +164,7 @@ describe('server', () => {
     expect(res.statusCode).toBe(400)
   })
 
+  // see issue 9678
   test('does not use cached intros in subcategories', async () => {
     let $ = await getDOM(
       '/en/get-started/importing-your-projects-to-github/importing-source-code-to-github/importing-a-git-repository-using-the-command-line',
@@ -183,9 +181,10 @@ describe('server', () => {
     const res = await get('/categories.json')
     expect(res.statusCode).toBe(200)
 
+    // check for CORS header
     expect(res.headers['access-control-allow-origin']).toBe('*')
 
-    // CDN caching must not set cookies.
+    // Check that it can be cached at the CDN
     expect(res.headers['set-cookie']).toBeUndefined()
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
@@ -202,7 +201,11 @@ describe('server', () => {
   describeViaActionsOnly('Early Access articles', () => {
     test('have noindex meta tags', async () => {
       const allPages = await loadPages()
-      // Match earlyAccessContext's development TOC input: English hidden early-access articles.
+      // This is what the earlyAccessContext middleware does to get a
+      // list of early-access pages for that TOC it displays when
+      // viewing /en/early-access in development.
+      // Here we're using it to get a least 1 page we can end-to-end
+      // test to look at it's meta tags.
       const hiddenPages = allPages.filter(
         (page) =>
           page.languageCode === 'en' &&
@@ -222,7 +225,7 @@ describe('server', () => {
       const res = await get('/articles/deleting-a-team', { followRedirects: false })
       expect(res.statusCode).toBe(302)
       expect(res.headers['set-cookie']).toBeUndefined()
-      // Language-specific redirects must vary by language headers.
+      // language specific caching
       expect(res.headers['cache-control']).toContain('public')
       expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
       expect(res.headers.vary).toContain('accept-language')
@@ -234,14 +237,18 @@ describe('server', () => {
       expect(res.statusCode).toBe(302)
       expect(res.headers.location).toBe('/en')
       expect(res.headers['set-cookie']).toBeUndefined()
-      // Language-specific redirects must vary by language headers.
+      // language specific caching
       expect(res.headers['cache-control']).toContain('public')
       expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
       expect(res.headers.vary).toContain('accept-language')
       expect(res.headers.vary).toContain('x-user-language')
     })
 
-    // Invalid Accept-Language once triggered a downstream Next.js 500; this route must redirect.
+    // This test exists because in a previous life, our NextJS used to
+    // 500 if the 'Accept-Language' header was malformed.
+    // We *used* have a custom middleware to cope with this and force a
+    // fallback redirect.
+    // See internal issue 19909
     test('redirects /en if Accept-Language header is malformed', async () => {
       const res = await get('/', {
         headers: {
@@ -253,7 +260,7 @@ describe('server', () => {
       expect(res.statusCode).toBe(302)
       expect(res.headers.location).toBe('/en')
       expect(res.headers['set-cookie']).toBeUndefined()
-      // Language-specific redirects must vary by language headers.
+      // language specific caching
       expect(res.headers['cache-control']).toContain('public')
       expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
       expect(res.headers.vary).toContain('accept-language')
@@ -271,7 +278,7 @@ describe('server', () => {
       expect(res.statusCode).toBe(302)
       expect(res.headers.location).toBe('/en')
       expect(res.headers['set-cookie']).toBeUndefined()
-      // Language-specific redirects must vary by language headers.
+      // language specific caching
       expect(res.headers['cache-control']).toContain('public')
       expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
       expect(res.headers.vary).toContain('accept-language')
@@ -283,7 +290,7 @@ describe('server', () => {
       expect(res.statusCode).toBe(302)
       expect(res.headers.location.startsWith('/en/')).toBe(true)
       expect(res.headers['set-cookie']).toBeUndefined()
-      // Language-specific redirects must vary by language headers.
+      // language specific caching
       expect(res.headers['cache-control']).toContain('public')
       expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
       expect(res.headers.vary).toContain('accept-language')
@@ -340,6 +347,7 @@ describe('server', () => {
       expect(res.statusCode).toBe(200)
       expect(res.headers['content-type']).toContain('text/markdown')
       expect(res.body).toMatch(/^# .+/)
+      // Verify the landing page has content beyond just the title
       expect(res.body).toMatch(/\n\n/)
       expect(res.body.split('\n').length).toBeGreaterThan(3)
     })
@@ -378,9 +386,10 @@ describe('static routes', () => {
     expect(res.statusCode).toBe(200)
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=\d+/)
-    // Static assets must not set cookies.
+    // Because static assets shouldn't be setting a cookie.
     expect(res.headers['set-cookie']).toBeUndefined()
-    // Unhashed asset URLs use the generic language surrogate key, not the manual key.
+    // The "Surrogate-Key" header is set so we can do smart invalidation
+    // in the Fastly CDN. This needs to be available for static assets too.
     expect(res.headers['surrogate-key']).toBeTruthy()
     expect(res.headers.etag).toBeUndefined()
     expect(res.headers['last-modified']).toBeTruthy()
@@ -412,7 +421,7 @@ describe('static routes', () => {
     expect(res.statusCode).toBe(200)
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=\d+/)
-    // Static assets must not set cookies.
+    // Because static assets shouldn't be setting a cookie.
     expect(res.headers['set-cookie']).toBeUndefined()
     expect(res.headers.etag).toBeUndefined()
     expect(res.headers['last-modified']).toBeTruthy()
@@ -438,7 +447,8 @@ describe('static routes', () => {
       '/server.js',
       '/.git',
       '/.env',
-      // Nested dotfile paths prove product routing cannot expose repo contents.
+      // Also add paths that aren't at the root. But it doesn't matter
+      // which page this is done for so much.
       '/en/billing/.env',
       '/en/billing/.env.local',
       '/en/pages/.env_sample',

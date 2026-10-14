@@ -1,7 +1,10 @@
 import { AsyncLocalStorage } from 'async_hooks'
 import type { NextFunction, Request, Response } from 'express'
 
-// AsyncLocalStorage carries request fields from early middleware to downstream log calls.
+// Think of this like a Redux store, but for the backend
+// During an early middleware, we call asyncLocalStorage.run(store, () => { next() })
+// This ensures that all downstream middleware can access `store` from the asyncLocalStorage,
+// using the `getLoggerContext` function.
 export const asyncLocalStorage = new AsyncLocalStorage()
 
 export type LoggerContext = {
@@ -32,6 +35,7 @@ export function getLoggerContext(): LoggerContext {
   return store as LoggerContext
 }
 
+// Called in subsequent middleware to update the request context
 export function updateLoggerContext(newContext: Partial<LoggerContext>): void {
   const store = asyncLocalStorage.getStore()
   if (!store) {
@@ -41,14 +45,19 @@ export function updateLoggerContext(newContext: Partial<LoggerContext>): void {
 }
 
 const INCLUDE_HEADERS = [
+  // Device / UA
   'user-agent',
   'sec-ch-ua',
   'sec-ch-ua-platform',
+  // Language
   'x-user-language',
   'accept-language',
+  // Version
   'x-user-version',
+  // Host
   'host',
   'x-host',
+  // Cache control
   'cache-control',
 ]
 
@@ -56,6 +65,7 @@ export function initLoggerContext(req: Request, res: Response, next: NextFunctio
   const requestUuid = crypto.randomUUID()
 
   const headers = {} as Record<string, string>
+  // Only include the headers we care about
   for (const [key, value] of Object.entries(req.headers)) {
     if (INCLUDE_HEADERS.includes(key)) {
       if (!value) {
@@ -68,6 +78,7 @@ export function initLoggerContext(req: Request, res: Response, next: NextFunctio
     }
   }
 
+  // This is all of the context we want to include for each logger.<method> call
   const store: LoggerContext = {
     requestUuid,
     path: req.path,
@@ -77,6 +88,7 @@ export function initLoggerContext(req: Request, res: Response, next: NextFunctio
     body: req.body,
   }
 
+  // Subsequent middleware and route handlers will have access to the { requestId } store
   asyncLocalStorage.run(store, () => {
     next()
   })

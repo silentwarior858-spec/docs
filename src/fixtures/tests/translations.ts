@@ -15,7 +15,7 @@ describe('translations', () => {
   test('home page', async () => {
     const $: CheerioAPI = await getDOM('/ja')
     const h1 = $('h1').text()
-    // src/fixtures/fixtures/translations/ja-jp/data/ui.yml localizes the home-page h1.
+    // You gotta know your src/fixtures/fixtures/translations/ja-jp/data/ui.yml
     expect(h1).toBe('日本 GitHub Docs')
 
     const links = $('[data-testid=product] a[href]')
@@ -61,11 +61,12 @@ describe('translations', () => {
         expect($(element).text()).toBe('こんにちは World')
       }
     })
-    // autotitling.md has 4 AUTOTITLE links.
+    // There are 4 links on the `autotitling.md` content.
     expect.assertions(4)
   })
 
   test('correction of linebreaks in translations', async () => {
+    // free-pro-team
     {
       const $: CheerioAPI = await getDOM('/ja/get-started/foo/table-with-ifversions')
 
@@ -78,6 +79,7 @@ describe('translations', () => {
       expect(tds.length).toBe(2)
       expect(tds[1]).toBe('Not')
     }
+    // enterprise-server
     {
       const $: CheerioAPI = await getDOM(
         '/ja/enterprise-server@latest/get-started/foo/table-with-ifversions',
@@ -94,21 +96,37 @@ describe('translations', () => {
     }
   })
 
-  // Japanese translation fixtures include malformed AUTOTITLE links in content and reusables.
-  // Input: ["AUTOTITLE](/get-started/start-your-journey/hello-world)."
-  // Bad output: <a href="/ja/get-started/start-your-journey/hello-world">&quot;AUTOTITLE</a>
-  // Runtime correction must remove AUTOTITLE because translation CI does not catch this Markdown.
   test('automatic correction of bad AUTOTITLE in reusables', async () => {
     const $: CheerioAPI = await getDOM('/ja/get-started/start-your-journey/hello-world')
     const links = $('#article-contents a[href]')
     const texts = links.map((i: number, element: Element) => $(element).text()).get()
+    // That Japanese page uses AUTOTITLE links. Both in the main `.md` file
+    // but also inside a reusable.
+    // E.g. `["AUTOTITLE](/get-started/start-your-journey/hello-world)."`
+    // If we didn't do the necessary string corrections on translations'
+    // content and reusables what *would* remain is a HTML link that
+    // would look like this:
+    //
+    //    <a href="/ja/get-started/start-your-journey/hello-world">&quot;AUTOTITLE</a>
+    //
+    // This test makes sure no such string is left in any of the article
+    // content links.
+    // Note that, in English, it's not acceptable to have such a piece of
+    // Markdown. It would not be let into `main` by our CI checks. But
+    // by their nature, translations are not checked by CI in the same way.
+    // Its "flaws" have to be corrected at runtime.
     const stillAutotitle = texts.filter((text: string) => /autotitle/i.test(text))
     expect(stillAutotitle.length).toBe(0)
   })
 
-  // Translators wrote [[Bar](バー)](/get-started/foo/bar), which must render as
-  // <a href="/ja/get-started/foo/bar">[Bar](バー)</a>.
   test('markdown link looking constructs inside links', async () => {
+    // On this page, the translators had written:
+    //
+    //   [[Bar](バー)](/get-started/foo/bar)
+    //
+    // which needs to become:
+    //
+    //   <a href="/ja/get-started/foo/bar">[Bar](バー)</a>
     const $: CheerioAPI = await getDOM('/ja/get-started/start-your-journey/hello-world')
     const links = $('#article-contents a[href]')
     const texts = links
@@ -118,6 +136,7 @@ describe('translations', () => {
       })
       .map((i: number, element: Element) => $(element).text())
       .get()
+    // Check that the text contains the essential parts rather than exact spacing
     const foundBarLink = texts.find(
       (text: string) => text.includes('[Bar]') && text.includes('(バー)'),
     )
@@ -127,16 +146,18 @@ describe('translations', () => {
   describe('localized category versioning', () => {
     test('category page works in all children versions', async () => {
       {
+        // for translated content, we expect this to be OK
         const res = await head('/ja/get-started')
         expect(res.statusCode).toBe(200)
       }
       {
-        // The category allows ghes, but its only child is ghec-only, so enterprise-server 404s.
+        // The actual versioning for get-started/empty-categories
+        // does not specify ghes, so it should 404.
         const res = await head('/ja/enterprise-server@latest/get-started/empty-categories')
         expect(res.statusCode).toBe(404)
       }
       {
-        // The ghec-only child renders under enterprise-cloud.
+        // Yet this nested page shoudl work.
         const res = await head('/ja/enterprise-cloud@latest/get-started/empty-categories/only-ghec')
         expect(res.statusCode).toBe(200)
       }

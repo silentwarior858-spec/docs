@@ -1,17 +1,21 @@
-// Shared regexes avoid repeated RegExp construction.
+// This module is intended to keep our use of regular expressions DRY,
+// and to reduce the overhead of instantiating new RegExp objects
 
-// Path regexes must stop product IDs at slash, end, query, or fragment boundaries.
-// Example: /github/foo matches, but /github-foo does not.
+// if we're looking for part of a path, like /github,
+// we allow for four characters after the string: (\/|$|\?|#)
+// slash (/), end of line ($), query param (?), fragment (#)
+// this will ensure we capture: /github/foo, /github, /github?query=foo, /github#foo
+// and not capture: /github-foo
 
 export const githubDotcom = /\/github(\/|$|\?|#)/
-// Enterprise paths match /enterprise and /enterprise/foo, not /enterprise-admin.
+// we want to capture `/enterprise` and `/enterprise/foo` but NOT `/enterprise-admin`
 export const enterprise = /\/enterprise(?:\/|$|\?)(\d+\.\d+)?/
 export const admin = /enterprise\/(\d+\.\d+\/)?admin\/?/
 export const gheUser = /enterprise\/(\d+\.\d+\/)?user(\/|$|\?)/
 export const enterpriseHomepage = /\/enterprise\/?(\d+\.\d+)?$/
 export const desktop = /desktop\//
 export const oldGuidesPath = /(\/admin|(^|\/)desktop)\/guides/
-// Enterprise version extraction needs 11.10.340 and two-part versions.
+// need to capture 11.10.340 and 2.0+
 export const getEnterpriseVersionNumber = /enterprise\/(\d+\.\d+(?:\.340)?)/
 export const removeEnterpriseVersion = /(enterprise\/)\d+\.\d+\//
 export const guides = /guides\//
@@ -30,10 +34,12 @@ export const assetPaths = /\/(?:javascripts|stylesheets|assets|node_modules|dist
 export const oldApiPath = /\/v[34]\/(?!guides|overview).+?\/.+/
 export const staticRedirect = /<link rel="canonical" href="(.+?)">/
 export const enterpriseNoVersion = /\/enterprise\/([^\d].*$)/
-// currentVersion can inject plan@release values like private-instances@latest into old paths.
-// The regex also matches /enterprise/enterprise-server@2.22/user and /enterprise/user.
+// a {{ currentVersion }} in internal links may inject '<new-version@release>' into old paths,
+// so the oldEnterprisePath regex must match: /enterprise/private-instances@latest/user,
+// /enterprise/enterprise-server@2.22/user, /enterprise/2.22/user, and /enterprise/user
 export const oldEnterprisePath =
   /\/([a-z]{2}\/)?(enterprise\/)?(\S+?@(\S+?\/))?(\d.\d+\/)?(user[/$])?/
+// new versioning format patterns
 export const adminProduct = /\/admin(\/|$|\?|#)/
 export const enterpriseServer = /\/enterprise-server@/
 export const getEnterpriseServerNumber = /enterprise-server@(\d+\.\d+)/

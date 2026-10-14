@@ -20,8 +20,9 @@ describe(liquidIfTags.names.join(' - '), () => {
   test('if tags with version names fail', async () => {
     const markdown = [
       '{% if ghes %}',
-      // volvo is a feature-based version in fixture data.
+      // Valid test fixture feature name
       '{% if volvo %}',
+      // None of the args should contain a version name
       '{% if something and ghes %}',
     ]
     const result = await runRule(liquidIfTags, { strings: { markdown: markdown.join('\n') } })
@@ -53,10 +54,11 @@ describe(liquidIfVersionTags.names.join(' - '), () => {
       '{% ifversion ghec > 3.7 %}',
       '{% ifversion ghes !== 3.7 %}',
       '{% ifversion ghec === 3.7 %}',
-      // 2.9 falls outside supported GHES releases.
+      // < 2.9 is not in the currently supported list
       '{% ifversion ghes < 2.9 %}',
+      // Incorrect syntax
       '{% ifversion ghec or ifversion fpt %}',
-      // no ghec is an invalid spelling of not ghec.
+      // Typo - should be not ghec
       '{% ifversion no ghec %}',
     ]
     const result = await runRule(liquidIfVersionTags, {

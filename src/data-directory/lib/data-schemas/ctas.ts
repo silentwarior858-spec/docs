@@ -1,9 +1,13 @@
+// This schema enforces the structure for CTA (Call-to-Action) URL parameters
+// Used to validate CTA tracking parameters in documentation links
+
 export default {
   type: 'object',
   additionalProperties: false,
   required: ['ref_product', 'ref_type', 'ref_style'],
   properties: {
-    // Example query parameter: ref_product=copilot.
+    // GitHub Product: The GitHub product the CTA leads users to
+    // Format: ref_product=copilot
     ref_product: {
       type: 'string',
       name: 'Product',
@@ -22,7 +26,8 @@ export default {
       ],
     },
 
-    // Example query parameter: ref_type=trial.
+    // Type of CTA: The type of action the CTA encourages users to take
+    // Format: ref_type=trial
     ref_type: {
       type: 'string',
       name: 'Type',
@@ -30,7 +35,8 @@ export default {
       enum: ['trial', 'purchase', 'engagement'],
     },
 
-    // Example query parameter: ref_style=button.
+    // CTA style: The way we are formatting the CTA in the docs
+    // Format: ref_style=button
     ref_style: {
       type: 'string',
       name: 'Style',
@@ -38,7 +44,8 @@ export default {
       enum: ['button', 'text'],
     },
 
-    // Example query parameter: ref_plan=business.
+    // Type of plan (Optional): For links to sign up for or trial a plan, the specific plan we link to
+    // Format: ref_plan=business
     ref_plan: {
       type: 'string',
       name: 'Plan',

@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 
-# Merges docs-early-access files into docs-internal from the docs-internal root.
+# Takes docs-early-access files and merges them into docs-internal
+# Assumed that it is being run from the root of the docs-internal repo
 
 mv docs-early-access/assets/images assets/images/early-access
 mv docs-early-access/content content/early-access

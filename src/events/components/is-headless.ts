@@ -1,3 +1,5 @@
+// Basic checks for if the browser is actually a headless browser robot
+
 declare global {
   interface Window {
     GHDOCSPLAYWRIGHT: boolean | number

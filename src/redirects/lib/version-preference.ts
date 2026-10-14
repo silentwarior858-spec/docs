@@ -2,21 +2,29 @@ import { allVersions, allVersionKeys } from '@/versions/lib/all-versions'
 import nonEnterpriseDefaultVersion from '@/versions/lib/non-enterprise-default-version'
 import { getPathWithoutLanguage } from '@/frame/lib/path-utils'
 
-// detect-version.ts rejects cookie values outside allVersionKeys.
+// Every version the reader can actually prefer over the unversioned form.
+// `detect-version.ts` already refuses cookie values outside `allVersionKeys`,
+// so anything reaching here is a real version.
 const alternateVersions = allVersionKeys.filter((v) => v !== nonEnterpriseDefaultVersion)
 
-// Explicit version URLs must beat the cookie. allVersions omits enterprise-server@latest,
-// deprecated releases like enterprise-server@3.0, and legacy shapes like /enterprise/3.3/
-// and /enterprise-server/3.9/.
+// Segments that name a version rather than a product, in any form we have ever
+// served. `allVersions` is not enough on its own: it has no key for
+// `enterprise-server@latest`, for deprecated releases like `enterprise-server@3.0`,
+// or for the older `/enterprise/3.3/` and `/enterprise-server/3.9/` shapes. Those
+// still have to count as an explicit request, because a URL naming a version must
+// beat the cookie even when we no longer publish that version.
 const VERSION_PLANS = new Set([
   ...Object.values(allVersions).map((v) => v.plan),
   'github-ae',
   'enterprise',
 ])
 
-// A path naming a version beats the cookie.
-// Anything with @ is a version segment, because article slugs do not contain it.
-// The plan names cover the legacy unsuffixed shapes.
+/**
+ * Does this path name a version itself, rather than leaving it implied?
+ *
+ * Anything with an `@` is a version segment; no article slug contains one. The plan
+ * names cover the legacy unsuffixed shapes.
+ */
 export function pathNamesAVersion(path: string): boolean {
   const firstSegment = getPathWithoutLanguage(path).split('/')[1]
   if (!firstSegment) return false
@@ -24,23 +32,36 @@ export function pathNamesAVersion(path: string): boolean {
 }
 
 export type VersionPreference = {
-  // True when any cookie could change the response, even when this reader has none.
-  // Without this Vary, caches can serve a no-cookie response to a reader who needs a redirect.
+  /**
+   * True when some version cookie value would have changed the response, so the
+   * response has to vary on `x-user-version` even when this particular reader has
+   * no cookie. Varying only for cookie holders would let a no-cookie reader's
+   * cached page be served to someone who should have been redirected.
+   */
   vary: boolean
-  // Preference destination, when the article exists there.
+  /** Where to send this reader, if their preference applies and the article exists there. */
   redirectTo?: string
 }
 
 const NOTHING: VersionPreference = { vary: false }
 
-// A version cookie behaves like language: it is only the default.
-//
-// A version named in the URL wins, and missing preferred-version articles stay put.
-//
-// requestPath decides whether the URL named a version because getRedirect strips an
-// explicit /free-pro-team@latest prefix before this point.
-//
-// resolvedPath builds the versioned candidate so renamed articles resolve in one hop.
+/**
+ * Work out whether a reader's version preference applies to a request.
+ *
+ * The rule, decided in github/technical-content#7227, is that version behaves exactly like
+ * language: the cookie is only a default, a version named in the URL always wins, and
+ * an article that does not exist in the preferred version silently stays where it is.
+ *
+ * `requestPath` is the URL as asked for, and is what decides whether a version was named.
+ * It has to be, because `getRedirect` strips an explicit `/free-pro-team@latest` prefix
+ * before we get here. Reading the resolved path instead would make an explicit request
+ * for Free/Pro/Team indistinguishable from no request at all, and a reader who has set a
+ * cookie could never deliberately look at the Free/Pro/Team article again.
+ *
+ * `resolvedPath` is where the ordinary redirect logic decided to send them, and is what
+ * the versioned candidate is built from, so a renamed article resolves in one hop instead
+ * of two.
+ */
 export function getVersionPreference(
   requestPath: string,
   resolvedPath: string,
@@ -52,11 +73,15 @@ export function getVersionPreference(
 
   if (pathNamesAVersion(requestPath) || pathNamesAVersion(resolvedPath)) return NOTHING
 
-  // Language-less paths read a slug as the language and miss the language-prefixed pages lookup.
+  // Always a `URL.pathname` from the caller, so it always starts with `/` and this is
+  // always the first segment. On a path that never got a language prefix this reads some
+  // article slug as the language, and the candidate lookup below simply misses, because
+  // every key in `pages` is language-prefixed.
   const language = resolvedPath.split('/')[1]
   const withoutLanguage = getPathWithoutLanguage(resolvedPath)
 
-  // pages keys omit .md, but .md requests must redirect to .md versioned articles.
+  // `pages` is keyed by permalink, which carries no `.md` extension. Keep the extension
+  // aside so a `.md` request redirects to the `.md` form of the versioned article.
   const extension = withoutLanguage.endsWith('.md') ? '.md' : ''
   const lookupSuffix = extension ? withoutLanguage.slice(0, -extension.length) : withoutLanguage
 
@@ -65,7 +90,8 @@ export function getVersionPreference(
 
   for (const version of alternateVersions) {
     if (!(`/${language}/${version}${lookupSuffix}` in pages)) continue
-    // Any selectable version makes the response depend on x-user-version.
+    // At least one version of this article exists that the cookie could select, so the
+    // response depends on the cookie whether or not this reader has one.
     vary = true
     if (version === userVersion) {
       redirectTo = `/${language}/${version}${lookupSuffix}${extension}`

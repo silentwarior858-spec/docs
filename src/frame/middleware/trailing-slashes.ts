@@ -15,8 +15,7 @@ export default function trailingSlashes(req: ExtendedRequest, res: Response, nex
       if (split.length) {
         url += `?${split.join('?')}`
       }
-      // Collapse repeated slashes so the redirect points to one canonical URL.
-      url = url.replace(/\/+/g, '/')
+      url = url.replace(/\/+/g, '/') // Prevent multiple slashes
       defaultCacheControl(res)
       return res.safeRedirect(301, url)
     }

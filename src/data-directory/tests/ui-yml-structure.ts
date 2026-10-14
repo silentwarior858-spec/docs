@@ -13,7 +13,7 @@ describe('data/ui.yml structure', () => {
     const violations: string[] = []
 
     for (let i = 0; i < lines.length; i++) {
-      // Top-level keys start at column 0 with a word followed by colon.
+      // A top-level key starts at column 0 with a word followed by ':'
       if (/^[a-z_]+:/.test(lines[i]) && i > 0) {
         if (lines[i - 1].trim() !== '') {
           violations.push(`Line ${i + 1}: "${lines[i]}" is not preceded by a blank line`)

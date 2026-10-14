@@ -49,7 +49,6 @@ children:
   - /guides
   - /actions
   - /activity
-  - /agent-automations
   - /agent-tasks
   - /agents
   - /announcement-banners

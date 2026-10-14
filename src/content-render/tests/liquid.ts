@@ -8,7 +8,10 @@ import { allVersions } from '@/versions/lib/all-versions'
 import enterpriseServerReleases from '@/versions/lib/enterprise-server-releases'
 import type { Context, ExtendedRequest, Page } from '@/types'
 
-// Derive GHES versions from supported releases so deprecations do not require test updates.
+// Setup these variables so we don't need to manually update tests as GHES
+// versions continually get deprecated.  For example, if we deprecate GHES 3.0,
+// oldestSupportedGhes will be 3.1, secondOldestSupportedGhes will be 3.2, and
+// thirdOldestSupportedGhes will be 3.3.
 const oldestSupportedGhes =
   enterpriseServerReleases.supported[enterpriseServerReleases.supported.length - 1]
 const secondOldestSupportedGhes =
@@ -47,7 +50,7 @@ describe('liquid template parser', () => {
   vi.setConfig({ testTimeout: 60 * 1000 })
 
   describe('short versions', () => {
-    // shortVersionsMiddleware reads and mutates a request context.
+    // Create a fake req so we can test the shortVersions middleware
     const req = { language: 'en', query: {} } as ExtendedRequest
 
     test('FPT works as expected when it is FPT', async () => {
@@ -58,7 +61,7 @@ describe('liquid template parser', () => {
       } as Context
       contextualize(req)
       const output = await liquid.parseAndRender(shortVersionsTemplate, req.context)
-      // FPT matches directly and through the fpt or ghes shortcut.
+      // We should have TWO results because we are supporting two shortcuts
       expect(output.replace(/\s\s+/g, ' ').trim()).toBe(
         `I am FPT I am FTP or GHES < ${secondOldestSupportedGhes}`,
       )
@@ -67,6 +70,7 @@ describe('liquid template parser', () => {
     test('GHEC works as expected', async () => {
       req.context = {
         currentVersion: 'enterprise-cloud@latest',
+        // page: {},
         allVersions,
         enterpriseServerReleases,
       } as Context
@@ -140,13 +144,13 @@ describe('liquid template parser', () => {
   })
 
   describe('feature versions', () => {
-    // featureVersionsMiddleware reads and mutates a request context.
+    // Create a fake req so we can test the feature versions middleware
     const req = { language: 'en', query: {} } as ExtendedRequest
 
     test('does not render in FPT because feature is not available in FPT', async () => {
       req.context = {
         currentVersion: 'free-pro-team@latest',
-        page: {} as Page, // featureVersionsMiddleware only checks that page is truthy.
+        page: {} as Page, // it just has to be any truthy value
         allVersions,
         enterpriseServerReleases,
       } as Context
@@ -158,7 +162,7 @@ describe('liquid template parser', () => {
     test('renders in GHES because feature is available in GHES', async () => {
       req.context = {
         currentVersion: `enterprise-server@${enterpriseServerReleases.latest}`,
-        page: {} as Page, // featureVersionsMiddleware only checks that page is truthy.
+        page: {} as Page, // it just has to be any truthy value
         allVersions,
         enterpriseServerReleases,
       } as Context
@@ -170,7 +174,7 @@ describe('liquid template parser', () => {
     test('renders in GHEC because feature is available in GHEC', async () => {
       req.context = {
         currentVersion: 'enterprise-cloud@latest',
-        page: {} as Page, // featureVersionsMiddleware only checks that page is truthy.
+        page: {} as Page, // it just has to be any truthy value
         allVersions,
         enterpriseServerReleases,
       } as Context

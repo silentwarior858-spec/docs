@@ -17,19 +17,3 @@ This is the second heading.
 
 For a Playwright test of cross-page anchor navigation, here is a link to the
 [target heading](/get-started/foo/anchor-scrolling#target-heading).
-
-### Third-level heading
-
-This section exercises third-level heading styles.
-
-#### Fourth-level heading
-
-This section exercises fourth-level heading styles.
-
-##### Fifth-level heading
-
-This section exercises fifth-level heading styles.
-
-###### Sixth-level heading
-
-This section exercises sixth-level heading styles.

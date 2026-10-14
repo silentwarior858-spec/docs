@@ -25,7 +25,9 @@ children:
   - /analyze-functionality
   - /generate-code
   - /refactor-code
+  - /document-code
   - /testing-code
   - /analyze-security
 contentType: tutorials
 ---
+

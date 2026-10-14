@@ -1,7 +1,6 @@
 import React from 'react'
-import cx from 'clsx'
+import cx from 'classnames'
 import { SupportPortalVaIframe, SupportPortalVaIframeProps } from './SupportPortalVaIframe'
-import { useSidebarCollapsed } from '@/frame/components/sidebar/SidebarCollapseContext'
 
 import styles from './ArticleGridLayout.module.scss'
 
@@ -13,12 +12,6 @@ type Props = {
   className?: string
   supportPortalVaIframeProps?: SupportPortalVaIframeProps
   fullWidth?: boolean
-  // lg is the classic 1012px split; xxl waits until 1400px.
-  // Article and automated pages use xxl because the secondary bar owns the
-  // collapsed In this article control between 1012px and 1400px.
-  // When the left doc-tree rail collapses, the freed 326px lets xxl consumers
-  // reveal the drawer at about 1074px through the collapsed variant.
-  tocBreakpoint?: 'lg' | 'xxl'
 }
 export const ArticleGridLayout = ({
   intro,
@@ -28,34 +21,13 @@ export const ArticleGridLayout = ({
   className,
   supportPortalVaIframeProps,
   fullWidth,
-  tocBreakpoint = 'lg',
 }: Props) => {
-  const { collapsed } = useSidebarCollapsed()
-  // A collapsed left rail gives xxl consumers room to reveal the drawer before 1400px.
-  const xxlCollapsed = tocBreakpoint === 'xxl' && collapsed
-  const containerBoxStyles = fullWidth
-    ? ''
-    : cx(
-        styles.containerBox,
-        tocBreakpoint === 'xxl' &&
-          (xxlCollapsed ? styles.containerBoxXxlCollapsed : styles.containerBoxXxl),
-      )
+  const containerBoxStyles = fullWidth ? '' : styles.containerBox
   return (
     <div className={cx(containerBoxStyles, className)}>
-      {topper && (
-        <div
-          style={{ gridArea: 'topper' }}
-          className={cx(tocBreakpoint === 'xxl' && styles.heroTopper)}
-        >
-          {topper}
-        </div>
-      )}
+      {topper && <div style={{ gridArea: 'topper' }}>{topper}</div>}
       {intro && (
-        <div
-          id="article-intro"
-          style={{ gridArea: 'intro' }}
-          className={cx('f4 pb-4', tocBreakpoint === 'xxl' && styles.heroIntro)}
-        >
+        <div id="article-intro" style={{ gridArea: 'intro' }} className="f4 pb-4">
           {intro}
         </div>
       )}
@@ -63,18 +35,10 @@ export const ArticleGridLayout = ({
       {toc && (
         <div
           data-container="toc"
-          style={{ gridArea: 'sidebar' }}
-          className={cx(
-            styles.sidebarColumn,
-            tocBreakpoint === 'xxl'
-              ? xxlCollapsed
-                ? styles.sidebarColumnXxlCollapsed
-                : styles.sidebarColumnXxl
-              : // The lg fallback keeps stacked TOC spacing for future consumers that pass toc.
-                'pb-4 mb-5 pb-xl-0 mb-xl-0',
-          )}
+          style={{ gridArea: 'sidebar', alignSelf: 'flex-start' }}
+          className={cx(styles.sidebarBox, 'border-bottom border-lg-0 pb-4 mb-5 pb-xl-0 mb-xl-0')}
         >
-          <div className={styles.sidebarBox}>{toc}</div>
+          {toc}
         </div>
       )}
 

@@ -23,7 +23,9 @@ describe('journey-tracks-liquid', () => {
   })
 
   test('invalid liquid syntax fails', async () => {
-    // Keep malformed Liquid inline because fixture-wide runs let other rules parse it and crash.
+    // Using inline content instead of a fixture file to avoid CI conflicts.
+    // Malformed Liquid syntax in fixture files causes other rules (like liquid-versioning)
+    // to crash when they try to parse the same file during content linting.
     const invalidLiquidContent = `---
 title: Journey with Liquid Syntax
 layout: journey-landing
@@ -47,7 +49,7 @@ This journey landing page has invalid liquid syntax in journeyTracks.
       strings: { 'test-invalid-liquid.md': invalidLiquidContent },
       ...fmOptions,
     })
-    expect(result['test-invalid-liquid.md']).toHaveLength(2)
+    expect(result['test-invalid-liquid.md']).toHaveLength(2) // title and description both have invalid liquid
     expect(result['test-invalid-liquid.md'][0].ruleDescription).toMatch(/liquid syntax/i)
     expect(result['test-invalid-liquid.md'][1].ruleDescription).toMatch(/liquid syntax/i)
   })

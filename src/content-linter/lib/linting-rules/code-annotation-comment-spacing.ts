@@ -22,16 +22,19 @@ export const codeAnnotationCommentSpacing = {
         const trimmedLine = line.trim()
         if (!trimmedLine) continue
 
+        // Define a map of comment patterns
         const commentPatterns: Record<string, RegExp> = {
           '//': /^(\/\/)(.*)/, // JavaScript/TypeScript/Java/C# style comments
           '#': /^(#)(.*)/, // Python/Ruby/Shell/YAML style comments
           '--': /^(--)(.*)/, // SQL/Lua style comments
         }
 
+        // Check for different comment patterns
         let commentMatch: RegExpMatchArray | null = null
         let commentChar: string | null = null
         let restOfLine: string | null = null
 
+        // Iterate over the map to find a matching comment style
         for (const [char, pattern] of Object.entries(commentPatterns)) {
           if (trimmedLine.startsWith(char)) {
             commentMatch = trimmedLine.match(pattern)
@@ -42,16 +45,19 @@ export const codeAnnotationCommentSpacing = {
         }
 
         if (commentMatch && restOfLine !== null && commentChar !== null) {
-          // Treat shebang lines as executable directives, not code comments.
+          // Skip shebang lines (#!/...)
           if (trimmedLine.startsWith('#!')) {
             continue
           }
 
+          // Allow empty comments or comments with exactly one space
           if (restOfLine === '' || restOfLine.startsWith(' ')) {
+            // If it starts with a space, make sure it's exactly one space
             if (restOfLine.startsWith(' ') && restOfLine.length > 1 && restOfLine[1] === ' ') {
+              // Multiple spaces - this is an error
               const lineNumber: number = token.lineNumber + index + 1
               const fixedLine: string = line.replace(
-                new RegExp(`^(\\s*${RegExp.escape(commentChar)})\\s+`),
+                new RegExp(`^(\\s*${commentChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\s+`),
                 `$1 `,
               )
 
@@ -69,8 +75,10 @@ export const codeAnnotationCommentSpacing = {
                 },
               )
             }
+            // Single space or empty - this is correct
             continue
           } else {
+            // No space after comment character - this is an error
             const lineNumber: number = token.lineNumber + index + 1
             const leadingWhitespace: string = line.match(/^\s*/)![0]
             const fixedLine: string = `${leadingWhitespace + commentChar} ${restOfLine}`

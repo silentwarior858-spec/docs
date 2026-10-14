@@ -1,5 +1,8 @@
 @import "src/frame/stylesheets/breakpoint-xxl.scss";
 
+/* Code annotations
+----------------------------------------------------------------------------*/
+
 .annotate.beside {
   .annotate-beside {
     display: inherit;
@@ -28,10 +31,7 @@
 .annotate-header header {
   border-top-left-radius: 6px !important;
   border-top-right-radius: 6px !important;
-  // Brand's subtle border #d2d9d4 matches Primer --color-border-default #d0d7de;
-  // Brand's default #b6bfb8 is much darker.
-  border-bottom: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
+  border-bottom: 1px solid var(--color-border-default);
 }
 
 .annotate-beside,
@@ -60,24 +60,20 @@
 .annotate-beside > div:last-child > .annotate-code {
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;
-  border-bottom: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
+  border-bottom: 1px solid var(--color-border-default);
 }
 
 .annotate-inline {
-  border-left: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
-  border-right: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
-  border-bottom: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
+  border-left: 1px solid var(--color-border-default);
+  border-right: 1px solid var(--color-border-default);
+  border-bottom: 1px solid var(--color-border-default);
 }
 
 .annotate-toggle {
   background: var(--color-segmented-control-bg);
   border-radius: 6px;
   margin-right: 1rem;
-  font-weight: var(--base-text-weight-medium, 500);
+  font-weight: 500;
 }
 
 .annotate-option {
@@ -95,26 +91,23 @@
     border-color: var(--color-segmented-control-button-selected-border);
   }
 
+  // High contrast theme support
   @media (prefers-contrast: high) {
-    border-color: var(--brand-color-border-subtle, #d2d9d4);
+    border-color: var(--color-border-default);
 
     &:hover {
-      background: var(--brand-color-canvas-subtle, #f2f5f3);
-      // --color-border-emphasis is undefined here, so this border computes to currentColor.
-      // Brand's default border is its strongest border.
-      border-color: var(--brand-color-border-default, #b6bfb8);
+      background: var(--color-canvas-subtle);
+      border-color: var(--color-border-emphasis);
     }
 
     &.selected {
       background: var(--color-accent-emphasis);
       color: var(--color-fg-on-emphasis);
-      border-color: var(--brand-color-border-default, #b6bfb8);
+      border-color: var(--color-border-emphasis);
     }
 
     &:focus-visible {
-      // --color-focus-outset is undefined here; use Brand's focus token.
-      outline: var(--brand-borderWidth-thick, 2px) solid
-        var(--brand-color-focus, #0377ff);
+      outline: 2px solid var(--color-focus-outset);
       outline-offset: 2px;
     }
   }
@@ -129,18 +122,16 @@
     margin: 0 auto;
 
     &:hover {
-      border-radius: var(--brand-borderRadius-small, 0.25rem);
+      border-radius: 4px;
       outline: 2px solid var(--color-accent-fg);
     }
   }
 }
 
 .annotate-code {
-  background-color: var(--brand-color-canvas-subtle, #f2f5f3);
-  border-left: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
-  border-right: var(--brand-borderWidth-thin, 1px) solid
-    var(--brand-color-border-subtle, #d2d9d4);
+  background-color: var(--color-canvas-subtle);
+  border-left: 1px solid var(--color-border-default);
+  border-right: 1px solid var(--color-border-default);
 
   @include breakpoint(md) {
     width: 50%;
@@ -155,7 +146,7 @@
     width: 50%;
 
     padding: 16px 0 16px 16px;
-    font-size: var(--brand-text-size-100, 0.875rem);
+    font-size: 14px;
     margin: 0px;
   }
 }

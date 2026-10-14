@@ -3,9 +3,7 @@ title: About parent issue and sub-issue progress fields
 shortTitle: About sub-issue fields
 intro: You can show an issue's parent issue and view sub-issue progress in your projects.
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: sub-issues
 contentType: tutorials
 category:
   - Manage project items and fields

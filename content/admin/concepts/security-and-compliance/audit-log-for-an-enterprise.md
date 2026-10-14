@@ -20,8 +20,6 @@ versions:
 contentType: concepts
 category:
   - Secure and govern your enterprise
-docsTeamMetrics:
-  - enterprise-onboarding
 ---
 
 ## What are audit logs?

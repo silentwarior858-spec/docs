@@ -6,6 +6,10 @@ import { addError } from 'markdownlint-rule-helpers'
 import { getFrontmatter } from '../helpers/utils'
 import type { RuleParams, RuleErrorCallback, Rule } from '../../types'
 
+// ---------------------------------------------------------------------------
+// Template parser — derives all validation data from templates.md
+// ---------------------------------------------------------------------------
+
 const TEMPLATES_PATH = path.resolve('content/contributing/writing-for-github-docs/templates.md')
 const SENTINEL = '<!-- rai-card-template-source'
 const OPTIONAL_MARKER = '<!-- optional-section -->'
@@ -14,9 +18,13 @@ const PLACEHOLDER = 'APPLICATION-OR-PLATFORM-SERVICE'
 interface TemplateHeading {
   level: number
   text: string
+  /** Regex pattern for matching this heading in actual articles. */
   pattern: RegExp
+  /** Human-readable label for error messages. */
   label: string
+  /** If true, the section may be removed from a real article. */
   optional: boolean
+  /** For H3 headings, the pattern of the parent H2. */
   parentPattern?: RegExp
 }
 
@@ -26,8 +34,11 @@ export interface ParsedTemplate {
   reusables: string[]
 }
 
-// The template data lives in the first fenced yaml block after the sentinel marker.
-// Strip Liquid wrappers before parsing the embedded template.
+/**
+ * Extract the RAI card template code block from templates.md.
+ * Finds the sentinel HTML comment, then captures the next fenced code block.
+ * Strips {% raw %} / {% endraw %} and {% comment %}...{% endcomment %} blocks.
+ */
 function extractTemplateBlock(): string {
   const content = fs.readFileSync(TEMPLATES_PATH, 'utf-8')
   const sentinelIndex = content.indexOf(SENTINEL)
@@ -52,23 +63,35 @@ function extractTemplateBlock(): string {
     .replace(/\{%\s*comment\s*%\}[\s\S]*?\{%\s*endcomment\s*%\}/g, '')
 }
 
-// The placeholder maps to any article-specific service name; fixed headings must match exactly.
+/**
+ * Build a regex pattern from a template heading text.
+ * Headings containing the placeholder get a pattern that matches any text
+ * in place of the placeholder. Fixed headings get an exact match.
+ */
 function headingToPattern(text: string): RegExp {
-  const pattern = text
-    .split(PLACEHOLDER)
-    .map((part) => RegExp.escape(part))
-    .join('.+')
-  return new RegExp(`^${pattern}$`, 'i')
+  if (text.includes(PLACEHOLDER)) {
+    const escaped = text
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(new RegExp(PLACEHOLDER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '.+')
+    return new RegExp(`^${escaped}$`, 'i')
+  }
+  return new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
 }
 
-// Replace the placeholder with "..." to keep error messages concise.
+/**
+ * Build a human-readable label for error messages.
+ * Replaces the placeholder with "..." to keep messages concise.
+ */
 function headingLabel(level: number, text: string): string {
   const prefix = '#'.repeat(level)
   const label = text.includes(PLACEHOLDER) ? text.replace(PLACEHOLDER, '...') : text
   return `${prefix} ${label}`
 }
 
-// Read headings and required reusable paths from the template instead of duplicating them here.
+/**
+ * Parse the RAI template into structured heading and reusable data.
+ * This is the single source of truth for validation — no hardcoded constants.
+ */
 function parseTemplate(): ParsedTemplate {
   const block = extractTemplateBlock()
   const lines = block.split('\n')
@@ -117,6 +140,7 @@ function parseTemplate(): ParsedTemplate {
       continue
     }
 
+    // Parse reusable references
     const reusableMatches = line.matchAll(/\{%\s*data\s+([\w.-]+)\s*%\}/g)
     for (const m of reusableMatches) {
       if (!reusables.includes(m[1])) {
@@ -124,7 +148,7 @@ function parseTemplate(): ParsedTemplate {
       }
     }
 
-    // Non-heading content consumes the optional marker so it applies only to the next heading.
+    // Reset optional flag if line has non-whitespace content (not a heading or marker)
     if (line.trim() !== '') {
       nextIsOptional = false
     }
@@ -133,13 +157,17 @@ function parseTemplate(): ParsedTemplate {
   return { h2s, h3s, reusables }
 }
 
-// Parse templates.md once on first use.
+// Lazy singleton — parsed once on first use
 let _parsed: ParsedTemplate | null = null
 
 export function getTemplate(): ParsedTemplate {
   if (!_parsed) _parsed = parseTemplate()
   return _parsed
 }
+
+// ---------------------------------------------------------------------------
+// File-level heading extraction
+// ---------------------------------------------------------------------------
 
 interface Heading {
   level: number
@@ -162,6 +190,13 @@ function extractHeadings(lines: string[]): Heading[] {
   return headings
 }
 
+// ---------------------------------------------------------------------------
+// Validators
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate required H2 sections exist and appear in the correct order.
+ */
 function validateH2Sections(
   headings: Heading[],
   template: ParsedTemplate,
@@ -197,13 +232,17 @@ function validateH2Sections(
   }
 }
 
-// Required H3s must exist, and structured parents reject unknown H3 headings.
+/**
+ * Validate H3 subsections in a single pass: required ones must exist,
+ * and all H3s under structured parents must match a known template heading.
+ */
 function validateH3Subsections(
   headings: Heading[],
   template: ParsedTemplate,
   onError: RuleErrorCallback,
 ): void {
-  // Key by pattern source instead of RegExp object identity.
+  // Group template H3s by parent pattern (keyed by pattern source string to
+  // avoid relying on RegExp reference equality).
   const h3sByParent = new Map<string, { parentPattern: RegExp; h3s: TemplateHeading[] }>()
   for (const h3 of template.h3s) {
     if (!h3.parentPattern) continue
@@ -215,14 +254,16 @@ function validateH3Subsections(
 
   for (const [, { parentPattern, h3s: templateH3s }] of h3sByParent) {
     const parentIndex = headings.findIndex((h) => h.level === 2 && parentPattern.test(h.text))
-    if (parentIndex === -1) continue // validateH2Sections reports missing parents.
+    if (parentIndex === -1) continue // Missing parent caught by validateH2Sections
 
+    // Collect actual H3s under this parent
     const childH3s: Heading[] = []
     for (let i = parentIndex + 1; i < headings.length; i++) {
       if (headings[i].level <= 2) break
       if (headings[i].level === 3) childH3s.push(headings[i])
     }
 
+    // Check required H3s exist
     for (const required of templateH3s) {
       if (required.optional) continue
       const found = childH3s.some((h) => required.pattern.test(h.text))
@@ -238,6 +279,7 @@ function validateH3Subsections(
       }
     }
 
+    // Check all actual H3s match a known template heading
     for (const child of childH3s) {
       const matchesKnown = templateH3s.some((t) => t.pattern.test(child.text))
       if (!matchesKnown) {
@@ -254,6 +296,9 @@ function validateH3Subsections(
   }
 }
 
+/**
+ * Validate that all required boilerplate reusable references are present.
+ */
 function validateReusables(
   lines: string[],
   template: ParsedTemplate,
@@ -275,6 +320,10 @@ function validateReusables(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rule export
+// ---------------------------------------------------------------------------
+
 interface Frontmatter {
   contentType?: string
   [key: string]: unknown
@@ -282,7 +331,7 @@ interface Frontmatter {
 
 function isFileRaiCard(params: RuleParams): boolean {
   const fm: Frontmatter = (getFrontmatter(params.frontMatterLines) as Frontmatter) || {}
-  // Files with children are landing pages that aggregate cards, not cards themselves.
+  // Files with children: are landing pages that aggregate cards, not cards themselves.
   return fm.contentType === 'rai' && !('children' in fm)
 }
 

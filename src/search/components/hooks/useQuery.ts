@@ -1,6 +1,6 @@
 export function parseDebug(debug: string | Array<string> | undefined) {
   if (debug === '') {
-    // Treat /search?query=secret-scanning&debug as truthy.
+    // E.g. `?query=foo&debug` should be treated as truthy
     return true
   }
 
@@ -8,6 +8,7 @@ export function parseDebug(debug: string | Array<string> | undefined) {
     return false
   }
 
+  // Now `router.query.debug` is either string or any array of strings
   if (Array.isArray(debug)) {
     debug = debug[0]
   }

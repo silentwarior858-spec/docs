@@ -22,7 +22,6 @@ versions:
 children:
   - /upgrade-plan
   - /downgrade-plan
-  - /change-billing-cycle
   - /manage-pending-changes
   - /view-enterprise-usage
   - /manage-user-licenses

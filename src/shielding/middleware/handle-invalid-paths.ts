@@ -3,7 +3,10 @@ import type { Response, NextFunction } from 'express'
 import { defaultCacheControl } from '@/frame/middleware/cache-control'
 import { ExtendedRequest } from '@/types'
 
-// These path guesses come from penetration-testing bots.
+// We'll check if the current request path is one of these, or ends with
+// one of these.
+// These are clearly intentional "guesses" made by some sort of
+// pen-testing bot.
 const JUNK_STARTS = ['///', '/\\', '/\\.']
 const JUNK_ENDS = [
   '/package.json',
@@ -25,9 +28,10 @@ const JUNK_PATHS = new Set([
   '/_next',
 ])
 
-// Basenames catch nested probes such as /en/code-security/.env.
+// Basename is the last token of the path when split by `/`.
+// For example `/foo/bar/baz` has a basename of `baz`.
 const JUNK_BASENAMES = new Set([
-  // Keep .env separate from .env.local matching below.
+  // E.g. /en/code-security/.env
   '.env',
 ])
 
@@ -47,16 +51,18 @@ function isJunkPath(path: string) {
   }
 
   const basename = path.split('/').pop()
-  // Matches /billing/.env.local and /billing/.env_sample.
+  // E.g. `/billing/.env.local` or `/billing/.env_sample`
   if (basename && /^\.env(.|_)[\w.]+/.test(basename)) return true
   if (basename && JUNK_BASENAMES.has(basename)) return true
 
-  // Block malformed Next.js paths before Next.js handles them.
+  // Prevent various malicious injection attacks targeting Next.js
   if (path.match(/^\/_next[^/]/) || path === '/_next/data' || path === '/_next/data/') {
     return true
   }
 
-  // Docs does not use next/image, so these paths can 404 before Next.js handles them.
+  // We currently don't use next/image for any images.
+  // This could change in the future but right now can just 404 on these
+  // so we don't have to deal with any other errors.
   if (path.startsWith('/_next/image')) {
     return true
   }
@@ -70,7 +76,8 @@ export default function handleInvalidPaths(
   next: NextFunction,
 ) {
   if (isJunkPath(req.path)) {
-    // The CDN can cache scanner responses because the paths will not work in the next deployment.
+    // We can all the CDN to cache these responses because they're
+    // they're not going to suddenly work in the next deployment.
     defaultCacheControl(res)
     res.status(404).type('text').send('Not found')
     return

@@ -9,17 +9,21 @@ import {
 } from '../helpers/liquid-utils'
 import { getFrontmatter, getFrontmatterLines } from '../helpers/utils'
 import getApplicableVersions from '@/versions/lib/get-applicable-versions'
+import { allVersions } from '@/versions/lib/all-versions'
 import { difference } from 'lodash-es'
+import { convertVersionsToFrontmatter } from '@/automated-pipelines/lib/update-markdown'
 import {
+  isAllVersions,
   getFeatureVersionsObject,
   isInAllGhes,
   isGhesReleaseDeprecated,
 } from '@/ghes-releases/scripts/version-utils'
-import { nextNext, oldestSupported } from '@/versions/lib/enterprise-server-releases'
-import versionSatisfiesRange from '@/versions/lib/version-satisfies-range'
+import { oldestSupported } from '@/versions/lib/enterprise-server-releases'
 import type { RuleParams, RuleErrorCallback } from '@/content-linter/types'
 
-// getLiquidIfVersionTokens exposes runtime properties that liquidjs TopLevelToken omits.
+// A liquidjs token, as exposed by getLiquidIfVersionTokens. liquidjs's TopLevelToken
+// type does not declare all of the runtime properties we rely on (begin/end, content,
+// contentRange, name), so we narrow it here.
 type LiquidConditionalToken = TopLevelToken & {
   name: string
   content: string
@@ -28,7 +32,8 @@ type LiquidConditionalToken = TopLevelToken & {
   contentRange: [number, number]
 }
 
-// Frontmatter versions can be a wildcard string or a short-name map with semver ranges.
+// Frontmatter `versions` declaration. May be a wildcard string ("*") or a record
+// keyed by short version names (fpt, ghec, ghes, feature, ...) with semver-range values.
 type VersionsObject = Record<string, string>
 type FileVersionsFm = string | VersionsObject | undefined
 
@@ -43,8 +48,11 @@ type CondTagAction = {
   content?: unknown
 }
 
-// CondTagItem carries derived version data between decoration, updates, and error reporting.
-// Condition version objects stay empty on else and endif entries; else gets leftover versions.
+// Internal representation of an ifversion/elsif/else/endif tag that flows through
+// the rule. fileVersionsFmAll, versionsObj, featureVersionsObj, versionsObjAll, and
+// versions are populated for ifversion/elsif tags and may be absent on else/endif.
+// `action` is always populated by decorateCondTagItems before setLiquidErrors and
+// updateConditionals run.
 type CondTagItem = {
   name: string
   cond: string
@@ -60,7 +68,7 @@ type CondTagItem = {
   versionsObjAll: VersionsObject
   versions: string[]
   action: CondTagAction
-  // addError accepts this cached range, but this rule never sets it.
+  // Cached error range (used by addError); never set by this rule but accepted by addError.
   contentRange?: [number, number] | number[] | string | null
 }
 
@@ -78,7 +86,8 @@ export const liquidIfversionVersions = {
   tags: ['liquid', 'versioning'],
   asynchronous: true,
   function: async (params: RuleParams, onError: RuleErrorCallback) => {
-    // Data files read all product versions instead of page frontmatter versions.
+    // The versions frontmatter object or all versions if the file
+    // being processed is a data file.
     const fm = getFrontmatter(params.lines)
     const content = fm ? getFrontmatterLines(params.lines).join('\n') : params.lines.join('\n')
 
@@ -88,17 +97,20 @@ export const liquidIfversionVersions = {
         ? (fm.versions as FileVersionsFm)
         : (getFrontmatter(params.frontMatterLines)?.versions as FileVersionsFm)
     if (!fileVersionsFm) return
-    // getApplicableVersions includes supported and upcoming versions, but not deprecated ones.
+    // This will only contain valid (non-deprecated) and future versions
     const fileVersions = getApplicableVersions(fileVersionsFm, '', {
       doNotThrow: true,
       includeNextVersion: true,
     })
 
     const tokens = getLiquidIfVersionTokens(content) as LiquidConditionalToken[]
-    // Each stack entry holds one ifversion, elsif, else, and endif chain.
+    // Array of arrays - each array entry is an array of items that
+    // make up a full if/elsif/else/endif statement.
+    // [ [ifversion, elsif, else, endif], [nested ifversion, elsif, else, endif] ]
     const condStmtStack: CondTagItem[][] = []
 
-    // Build each conditional chain from source order before decorating its actions.
+    // Tokens are in the order they are read in file, so we need to iterate
+    // through and group full if/elsif/else/endif statements together.
     const defaultProps: DefaultProps = {
       fileVersionsFm,
       fileVersions,
@@ -123,7 +135,8 @@ export const liquidIfversionVersions = {
       } else if (token.name === 'else') {
         const condTagItems = condStmtStack.pop()!
         const condTagItem = await initTagObject(token, defaultProps)
-        // else covers file versions excluded by previous ifversion and elsif tags.
+        // The versions of an else tag are the set of file versions that are
+        // not supported by the previous ifversion or elsif tags.
         const siblingVersions = condTagItems
           .filter((item) => item.name === 'ifversion' || item.name === 'elsif')
           .map((item) => item.versions)
@@ -150,7 +163,8 @@ function setLiquidErrors(condTagItems: CondTagItem[], onError: RuleErrorCallback
     const itemErrorName = tagNameNoCond ? item.name : `${item.name} ${item.cond}`
 
     if (item.action?.type === 'delete') {
-      // endif deletes through its own end because no following stack item exists.
+      // There is no next stack item, the endif tag is alway the
+      // last in a conditional
       const nextStackItem = item.name === 'endif' ? condTagItems[i].end : condTagItems[i + 1].begin
       const deleteItems = getContentDeleteData(
         condTagItems[i] as unknown as TopLevelToken,
@@ -175,7 +189,7 @@ function setLiquidErrors(condTagItems: CondTagItem[], onError: RuleErrorCallback
     }
 
     if (item.action?.type === 'all') {
-      // The all action removes only the tag.
+      // position is just the tag
       const { lineNumber, column, length } = getPositionData(
         {
           begin: item.begin,
@@ -200,7 +214,7 @@ function setLiquidErrors(condTagItems: CondTagItem[], onError: RuleErrorCallback
     }
 
     if (item.action?.type === 'change') {
-      // The change action replaces only the tag contents.
+      // position is just the inside of tag
       const { lineNumber, column, length } = getPositionData(
         {
           begin: item.contentrange[0],
@@ -229,27 +243,27 @@ function setLiquidErrors(condTagItems: CondTagItem[], onError: RuleErrorCallback
 
 async function getApplicableVersionFromLiquidTag(conditionStr: string): Promise<VersionsObject> {
   const newConditionObject: VersionsObject = {}
-  const notProducts: string[] = []
-  const liquidTagVersions = conditionStr.split(' or ').map((item) => item.trim())
+  const condition = conditionStr.replace('not ', '')
+  const liquidTagVersions = condition.split(' or ').map((item) => item.trim())
   for (const ver of liquidTagVersions) {
-    const notMatch = ver.match(/^not (fpt|ghec|ghes)$/)
-    if (notMatch) {
-      notProducts.push(notMatch[1])
-      continue
-    }
-    // Bare product and feature names, such as fpt or ghec, map directly to frontmatter versions.
+    // When the version is not a release e.g. fpt or ghec or
+    // or a feature version
     if (ver.split(' ').length === 1) {
-      // Frontmatter represents one feature version at a time.
+      // handle feature versions (only supports a single feature version)
       if (ver !== 'fpt' && ver !== 'ghec' && ver !== 'ghes') {
         newConditionObject['feature'] = ver
       } else {
         newConditionObject[ver] = '*'
       }
     } else if (ver.includes(' and ')) {
-      // Compound GHES ranges such as ghes >= 3.1 and ghes < 3.4 collapse into one range string.
+      // When the version is a release e.g. ghes and the version is a range
+      // e.g. ghes >= 3.1 and ghes < 3.4
       const ands = ver.split(' and ')
       const firstAnd = ands[0].split(' ')[0]
-      // This rule only handles and conditions where every clause starts with the same product.
+      // if all ands don't start with the same version it's invalid
+      // Note: This edge case (e.g., "fpt and ghes >= 3.1") doesn't occur in our content.
+      // All actual uses have matching versions (e.g., "ghes and ghes > 3.19").
+      // If this edge case appears in the future, additional logic would be needed here.
       if (!ands.every((and) => and.startsWith(firstAnd))) {
         return {}
       }
@@ -263,18 +277,19 @@ async function getApplicableVersionFromLiquidTag(conditionStr: string): Promise<
       const andVersionFmString = andValues.join(' ')
       newConditionObject[andVersion] = andVersionFmString
     } else {
-      // Single GHES ranges such as ghes >= 3.1 map to the frontmatter range string.
+      // When the version is a release e.g. ghes >= 3.1
       const [version, ...release] = ver.split(' ')
       const versionFmString = release.join(' ').replaceAll("'", '')
       newConditionObject[version] = versionFmString
     }
   }
-  // The ifversion tag negates only the next product, so not fpt means every other product.
-  // Apply these after the loop so a range term such as ghes > 3.20 can't narrow them.
-  for (const notProduct of notProducts) {
-    for (const product of ['fpt', 'ghec', 'ghes']) {
-      if (product !== notProduct) newConditionObject[product] = '*'
-    }
+  if (conditionStr.includes('not ')) {
+    const all = Object.keys(allVersions)
+    const allApplicable = getApplicableVersions(newConditionObject, '', {
+      doNotThrow: true,
+      includeNextVersion: true,
+    })
+    return (await convertVersionsToFrontmatter(difference(all, allApplicable))) as VersionsObject
   }
   return newConditionObject
 }
@@ -284,7 +299,10 @@ async function initTagObject(
   props: DefaultProps,
 ): Promise<CondTagItem> {
   const fileVersionsFm = props.fileVersionsFm
-  // Normalize wildcard frontmatter so Object.keys, GHES, and feature lookups read one shape.
+  // Normalize a wildcard string ('*') frontmatter `versions` value into the
+  // canonical all-versions object so downstream consumers (Object.keys, ghes /
+  // feature lookups) behave consistently. In practice no content file uses the
+  // string form today, but handling it keeps the rule type-safe and future-proof.
   const fmObject: VersionsObject =
     typeof fileVersionsFm === 'string'
       ? { ghec: '*', ghes: '*', fpt: '*' }
@@ -328,33 +346,15 @@ async function initTagObject(
   return condTagItem
 }
 
-function coversAllVersions(item: CondTagItem): boolean {
-  const options = { doNotThrow: true, includeNextVersion: true }
-  const products = Object.fromEntries(
-    Object.entries(item.versionsObj).filter(([key]) => key !== 'feature'),
-  )
-  const sources: VersionsObject[] = [products, item.featureVersionsObj || {}]
-  const versions = new Set(sources.flatMap((source) => getApplicableVersions(source, '', options)))
-  const allApplicableVersions = getApplicableVersions(
-    { fpt: '*', ghec: '*', ghes: '*' },
-    '',
-    options,
-  )
-  // Ranges can only list known releases. An upper bound, such as < 3.25, = 3.24, or 3.20 - 3.24,
-  // can exclude future releases, so one lower-bound-only range must include the newest known release.
-  const coversFutureGhes = sources.some(
-    ({ ghes }) =>
-      ghes === '*' ||
-      (!!ghes &&
-        /^(\s*>=?\s*\d+(\.\d+)*)+\s*$/.test(ghes) &&
-        versionSatisfiesRange(nextNext, ghes)),
-  )
-  return coversFutureGhes && allApplicableVersions.every((version) => versions.has(version))
-}
-
-// Rather than filtering out items with no versions, give every item a blank
-// action and let updateConditionals decide which ones become delete or change.
-// setLiquidErrors turns the resulting actions into flaws later on.
+/*
+  Rather than filtering out noVersion items, populate
+  each item with content, newContent, action (delete, update, etc)
+  cond would be empty if the conditional is removed.
+  content would be empty if the content is to be deleted.
+  decorate with line number, length, and column.
+  Then create flaws per stack item.
+  newCond
+  */
 function decorateCondTagItems(condTagItems: CondTagItem[]) {
   for (const item of condTagItems) {
     item.action = {
@@ -373,20 +373,38 @@ function decorateCondTagItems(condTagItems: CondTagItem[]) {
 }
 
 function updateConditionals(condTagItems: CondTagItem[]) {
-  // Skip endif during action updates because endif has no versions.
+  // iterate through the ifversion, elsif, and else
+  // tags but NOT the endif tag. endif tags have
+  // no versions associated with them and are handled
+  // after the loop.
   for (let i = 0; i < condTagItems.length - 1; i++) {
     const item = condTagItems[i]
 
-    // Collapse feature conditions that cover all versions, including products named beside the feature.
-    // Check the union of versions, because a feature's ghes range must not hide a plain ghes.
-    if (item.featureVersionsObj && coversAllVersions(item)) {
+    // check if the condition is all versions, if so
+    // the liquid should always be removed regardless
+    // of whether it's a feature version or a nested
+    // condition.
+    // NOTE: Original code referenced `item.versionObj` (no `s`), which was always
+    // undefined; preserved as-is to avoid changing runtime behavior in this PR.
+    if (
+      isAllVersions(
+        item.featureVersionsObj ||
+          ((item as unknown as { versionObj?: VersionsObject }).versionObj as VersionsObject),
+      )
+    ) {
       processConditionals(item, condTagItems, i)
       break
     }
 
-    // Deprecatable features must be absent from every supported GHES release or present in all.
+    /** START check feature versions **/
+
+    // Feature versions that have all versions were removed above
+    // Deprecatable features are those that are either available
+    // in NO supported GHES releases or are available in ALL
+    // supported GHES releases.
     if (item.versionsObj?.feature && item.versionsObjAll?.ghes) {
-      // A feature available in every supported GHES release can collapse into the parent condition.
+      // Checks for features that are only available in all
+      // supported GHES releases
       if (
         Object.keys(item.fileVersionsFmAll).length === 1 &&
         item.fileVersionsFmAll.ghes === '*' &&
@@ -398,7 +416,8 @@ function updateConditionals(condTagItems: CondTagItem[]) {
         processConditionals(item, condTagItems, i)
         break
       }
-      // Delete a feature absent from every supported GHES release.
+      // Checks for features that are only available in no
+      // supported GHES releases
       if (isGhesReleaseDeprecated(oldestSupported, item.versionsObjAll.ghes)) {
         item.action.type = 'delete'
         continue
@@ -408,7 +427,10 @@ function updateConditionals(condTagItems: CondTagItem[]) {
       item.fileVersionsFm && typeof item.fileVersionsFm === 'object' ? item.fileVersionsFm : {}
     if (item.versionsObj?.feature || fileVersionsFmObject.feature) break
 
-    // Skip nested conditions under feature parents because feature versions can change.
+    // When the parent of a nested condition is a feature
+    // we don't want to assume that the feature versions
+    // won't change in the future. So we ignore checking
+    // nested conditions against their feature parent.
     if (
       item.parent &&
       item.parent.versions &&
@@ -418,7 +440,10 @@ function updateConditionals(condTagItems: CondTagItem[]) {
     )
       continue
 
-    // A nested condition that covers every parent version can collapse into the parent.
+    /** END Feature versions we DON'T want to remove **/
+
+    // Check if a nested condition has all versions
+    // compared to it's parent.
     if (
       item.parent &&
       item.parent.versions &&
@@ -429,23 +454,24 @@ function updateConditionals(condTagItems: CondTagItem[]) {
       break
     }
 
-    // A condition matching page frontmatter applies to every rendered version for this file.
+    // Check if the condition matches the page frontmatter
     const noDiffInFileVersions = difference(item.fileVersions, item.versions).length === 0
     if (noDiffInFileVersions) {
       processConditionals(item, condTagItems, i)
       break
     }
 
-    // Delete tags whose version set leaves no rendered versions.
+    // Only an item with ghes versioning only can be deleted
     if (item.versions.length === 0) {
       item.action.type = 'delete'
       continue
     }
 
-    // For unchanged else conditions, no other changes can apply.
+    // If the else condition hasn't already been marked as available
+    //  in all veresions or delete, then there are no other changes possible.
     if (item.name === 'else') continue
 
-    // Remove condition products that the page frontmatter does not define.
+    // Does the condition contain any versions not defined in the frontmatter
     const versionsNotInFrontmatter = difference(
       Object.keys(item.versionsObjAll),
       Object.keys(item.fileVersionsFmAll),
@@ -454,40 +480,48 @@ function updateConditionals(condTagItems: CondTagItem[]) {
       for (const key of versionsNotInFrontmatter) {
         delete item.versionsObj[key]
       }
-      // Also drop deprecated lower bounds so one fix pass leaves no GHD022 error.
-      if (item.versionsObj.ghes && item.versionsObj.ghes !== '*') {
-        item.versionsObj.ghes = getSimplifiedSemverRange(
-          rangeTerms(item.versionsObj.ghes)
-            .map((term) => term.join(' '))
-            .join(' '),
-        )
-      }
-      item.action.cond = toLiquidCondition(item.versionsObj)
+      item.action.cond = Object.keys(item.versionsObj).join(' or ')
       item.action.type = 'change'
       continue
     }
 
-    // Remaining changes only simplify GHES release ranges.
+    // All remaining changes only apply if the ghes release number
+    // must be updated
     if (!item.versionsObjAll.ghes || item.versionsObjAll.ghes === '*') continue
 
     const simplifiedSemver = getSimplifiedSemverRange(item.versionsObjAll.ghes)
-    // Drop GHES from the conditional when other products still apply.
+    // Change - Remove the GHES version but keep the other versions in
+    // the conditional
     if (simplifiedSemver === '' && Object.keys(item.versionsObj).length > 1) {
       item.action.type = 'change'
       delete item.versionsObj.ghes
-      item.action.cond = toLiquidCondition(item.versionsObj)
+      item.action.cond = Object.keys(item.versionsObj).join(' or ')
       continue
     }
 
-    // Replace changed GHES ranges with simplified semver.
+    // Change - Update the GHES semver range
     if (item.versionsObjAll.ghes !== simplifiedSemver && !item.versionsObjAll.feature) {
       item.action.type = 'change'
       item.versionsObj.ghes = simplifiedSemver
-      item.action.cond = toLiquidCondition(item.versionsObj)
+
+      // Create the new cond by translating the semver to the format
+      // used in frontmatter
+      if (simplifiedSemver !== '*') {
+        const newVersions = Object.entries(item.versionsObj).map(([key, value]) => {
+          if (key === 'ghes') {
+            if (value === '*') return key
+            return `${key} ${value}`
+          } else return key
+        })
+        item.action.cond = newVersions.join(' or ')
+      } else {
+        item.action.cond = Object.keys(item.versionsObj).join(' or ')
+      }
     }
   }
 
-  // If the deleted ifversion has a surviving elsif, promote the elsif to ifversion.
+  // Delete - When the ifversion tag is deleted and an elsif tag exists,
+  // the elsif tag name must be changed to ifversion.
   if (condTagItems[0].action.type === 'delete') {
     const elsifVersionIndex = condTagItems.findIndex(
       (item) => item.name === 'elsif' && item.action.type !== 'delete',
@@ -500,7 +534,8 @@ function updateConditionals(condTagItems: CondTagItem[]) {
     }
   }
 
-  // If the deleted ifversion leaves a full-coverage else, remove the else wrapper too.
+  // Delete - If an ifversion/else and the ifversion is deleted, change
+  // the else tag to all.
   if (
     condTagItems.length - 1 === 2 &&
     condTagItems[0].action.type === 'delete' &&
@@ -510,7 +545,7 @@ function updateConditionals(condTagItems: CondTagItem[]) {
     condTagItems[2].action.type = 'delete'
   }
 
-  // Delete endif when every condition body in the chain is deleted.
+  // Delete - If all items except endif are marked for delete, delete the endif
   const isAllDelete = condTagItems
     .slice(0, condTagItems.length - 1)
     .every((item) => item.action.type === 'delete')
@@ -519,33 +554,14 @@ function updateConditionals(condTagItems: CondTagItem[]) {
   }
 }
 
-// Turn a versions object back into Liquid, such as { ghes: '> 3.18 < 3.22', fpt: '*' }
-// into 'ghes > 3.18 and ghes < 3.22 or fpt'.
-function toLiquidCondition(versionsObj: VersionsObject): string {
-  return Object.entries(versionsObj)
-    .map(([key, value]) => {
-      if (key === 'feature') return value
-      const terms = rangeTerms(value).map(([operator, release]) => `${key} ${operator} ${release}`)
-      return terms.length ? terms.join(' and ') : key
-    })
-    .join(' or ')
-}
-
-// Split spaced and compact ranges, such as '> 3.18 <3.22', into [['>', '3.18'], ['<', '3.22']].
-function rangeTerms(range: string): [string, string][] {
-  return [...range.matchAll(/(!=|>=|<=|=|>|<)\s*([^\s<>=!]+)/g)].map(([, operator, release]) => [
-    operator,
-    release,
-  ])
-}
-
 function processConditionals(
   item: CondTagItem,
   condTagItems: CondTagItem[],
   indexOfAllItem: number,
 ) {
   item.action.type = 'all'
-  // When any tag covers all versions, every other tag in the statement is obsolete.
+  // if any tag in a statement is 'all', the
+  // remaining tags are obsolete.
   for (let i = 0; i < condTagItems.length; i++) {
     const stackItem = condTagItems[i]
     if (indexOfAllItem !== i) {

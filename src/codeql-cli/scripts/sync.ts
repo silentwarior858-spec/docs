@@ -1,9 +1,11 @@
-import { mkdir, rm, readFile, writeFile, copyFile } from 'fs/promises'
+import { readFile, writeFile, copyFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import walk from 'walk-sync'
+import { mkdirp } from 'mkdirp'
 import { execFileSync, execSync } from 'child_process'
 import path from 'path'
 import matter from '@gr2m/gray-matter'
+import { rimraf } from 'rimraf'
 
 import { updateContentDirectory } from '../../automated-pipelines/lib/update-markdown'
 import { convertContentToDocs } from './convert-markdown-for-docs'
@@ -20,6 +22,7 @@ main()
 async function main() {
   await setupEnvironment()
 
+  // convert the rst files to Markdown using pandoc
   await rstToMarkdown(sourceDirectory)
 
   const markdownFiles = walk(TEMP_DIRECTORY, {
@@ -30,7 +33,11 @@ async function main() {
 
   for (const file of markdownFiles) {
     const sourceContent = await readFile(file, 'utf8')
-    // Source Markdown lacks a Primary Options heading under Options; raw text avoids AST insertion.
+    // There is a missing heading in the source content called "Primary Options"
+    // It should be directory under the "Options" heading.
+    // It's a quite a bit more complicated to add new nodes in the AST when
+    // the node isn't a child of the previous heading. It's pretty easy to
+    // just append a second heading here.
     const matchHeading = '## Options\n'
     const primaryHeadingSourceContent = sourceContent.replace(
       matchHeading,
@@ -48,6 +55,7 @@ async function main() {
     const finalSourceContent = MARKDOWN_PREFIX + content
     cliMarkdownContents[targetFilename] = { data: sourceData, content: finalSourceContent }
   }
+  // Begin updating Markdown files in the content directory
   await updateContentDirectory({
     targetDirectory,
     sourceContent: cliMarkdownContents,
@@ -55,6 +63,7 @@ async function main() {
   })
 }
 
+// Separates out steps that need to be done before the sync can begin
 async function setupEnvironment() {
   if (!existsSync(SOURCE_REPO)) {
     const errorMessage = `Source directory ${SOURCE_REPO} does not exist. Please clone the repo.`
@@ -67,10 +76,13 @@ async function setupEnvironment() {
     )
   }
 
-  await rm(TEMP_DIRECTORY, { recursive: true, force: true })
-  await mkdir(TEMP_DIRECTORY, { recursive: true })
+  // refresh the temp directory
+  await rimraf(TEMP_DIRECTORY)
+  await mkdirp(TEMP_DIRECTORY)
 }
 
+// copy the raw rst files to the temp directory and convert them
+// to Markdownusing pandoc
 async function rstToMarkdown(rstSourceDirectory: string) {
   const sourceFiles = walk(rstSourceDirectory, {
     includeBasePath: true,
@@ -85,6 +97,7 @@ async function rstToMarkdown(rstSourceDirectory: string) {
     }
     await copyFile(file, tempFilePath)
 
+    // Convert the rst files to Markdown
     const markdownFilename = path.basename(file).replace('.rst', '.md')
     const outputFilepath = `${TEMP_DIRECTORY}/${markdownFilename}`
     if (outputFilepath.includes(' ') || outputFilepath.includes('..')) {

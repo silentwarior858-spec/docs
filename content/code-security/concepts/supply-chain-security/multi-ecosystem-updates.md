@@ -3,9 +3,7 @@ title: Multi-ecosystem updates
 intro: Multi-ecosystem updates combine dependency updates across multiple package ecosystems into a single pull request, reducing review overhead and simplifying your update workflow.
 contentType: concepts
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: dependabot-multi-ecosystem-support
 shortTitle: Multi-ecosystem updates
 category:
   - Secure your dependencies

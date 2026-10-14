@@ -12,8 +12,6 @@ redirect_from:
   - /enterprise-onboarding/govern-people-and-repositories/about-enterprise-policies
 category:
   - Secure and govern your enterprise
-docsTeamMetrics:
-  - enterprise-onboarding
 ---
 
 ## What are enterprise policies and why are they important?

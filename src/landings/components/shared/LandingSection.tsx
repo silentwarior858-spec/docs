@@ -1,5 +1,5 @@
 import React from 'react'
-import cx from 'clsx'
+import cx from 'classnames'
 
 import styles from './LandingSection.module.scss'
 
@@ -8,7 +8,7 @@ type LandingSectionProps = {
   className?: string
 }
 
-// In framed sections, the outer band spans the full content column
+// A Docs 2026 "framed section". The outer band spans the full content column
 // and draws the horizontal rules; the inner frame is inset by a gutter and
 // draws the vertical side rules, so the horizontal rules always extend past the
 // vertical ones.

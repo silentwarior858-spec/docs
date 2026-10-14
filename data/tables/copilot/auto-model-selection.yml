@@ -19,92 +19,97 @@
 # - app: Availability for GitHub Copilot app.
 
 # OpenAI
+- name: GPT-5 mini
+  cloud_agent: false
+  chat: true
+  cli: true
+  app: true
+
+- name: GPT-5.3-Codex
+  cloud_agent: true
+  chat: true
+  cli: false
+  app: true
+
+- name: GPT-5.4
+  cloud_agent: true
+  chat: true
+  cli: true
+  app: true
+
+- name: GPT-5.4 mini
+  cloud_agent: false
+  chat: true
+  cli: true
+  app: true
+
+- name: GPT-5.5
+  cloud_agent: false
+  chat: true
+  cli: true
+  app: false
 
 - name: GPT-5.6 Luna
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
+  app: false
 
 - name: GPT-5.6 Sol
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
+  app: false
 
 - name: GPT-5.6 Terra
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
-
-- name: GPT-6 Astra
-  cloud_agent: true
-  chat: true
-  cli: true
-  app: true
-
-- name: GPT-6 Luna
-  cloud_agent: true
-  chat: true
-  cli: true
-  app: true
-
-- name: GPT-6 Sol
-  cloud_agent: true
-  chat: true
-  cli: true
-  app: true
-
-- name: GPT-6.1 Sol
-  cloud_agent: true
-  chat: true
-  cli: true
-  app: true
+  app: false
 
 # Anthropic
 - name: Claude Haiku 4.5
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
   app: true
 
 - name: Claude Opus 4.8
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
+  app: false
 
 - name: Claude Opus 5
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
+  app: false
 
-- name: Claude Opus 5.5
+- name: Claude Sonnet 4.6
   cloud_agent: true
   chat: true
   cli: true
   app: true
 
 - name: Claude Sonnet 5
-  cloud_agent: true
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
-
-- name: Claude Sonnet 5.5
-  cloud_agent: true
-  chat: true
-  cli: true
-  app: true
+  app: false
 
 # Google
-- name: Gemini 3.8 Flash
-  cloud_agent: true
+- name: Gemini 3.6 Flash
+  cloud_agent: false
   chat: true
   cli: true
-  app: true
+  app: false
+
+- name: Gemini 3.7 Flash
+  cloud_agent: false
+  chat: true
+  cli: true
+  app: false
 
 # Microsoft
 - name: MAI-Code-1.1-Flash

@@ -8,10 +8,6 @@
   h3,
   span {
     user-select: text;
-    color: var(--brand-color-text-link-rest);
+    color: var(--fgColor-accent, var(--color-accent-fg));
   }
-}
-
-.textMuted {
-  color: var(--brand-color-text-muted);
 }

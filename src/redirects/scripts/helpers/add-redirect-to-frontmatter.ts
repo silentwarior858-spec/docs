@@ -1,3 +1,5 @@
+// add a new redirect string to redirect_from frontmatter
+
 export default function addRedirectToFrontmatter(
   redirectFromData: string | string[] | undefined,
   newRedirectString: string,

@@ -1,5 +1,11 @@
-// Updates content internal links by correcting titles, hrefs, or both.
-// Usage: npm run update-internal-links -- --help
+// [start-readme]
+//
+// Run this script to update content's internal links.
+// It can correct the title part or the URL part or both.
+//
+// Best way to understand how to use it is to run it with `--help`.
+//
+// [end-readme]
 
 import fs from 'fs'
 import path from 'path'
@@ -47,8 +53,6 @@ type Options = {
   exclude: string[]
   filesOrDirectories?: string[]
 }
-// main computes every link update before writing files.
-// updateInternalLinks returns planned edits only, so one broken link can fail before files change.
 async function main(files: string[], opts: Options) {
   const { debug } = opts
 
@@ -96,7 +100,7 @@ async function main(files: string[], opts: Options) {
       console.log(chalk.bold(`Updating internal links in ${actualFiles.length} found files...`))
     }
 
-    // Commander negative flags map to positive library options here.
+    // The updateInternalLinks doesn't use "negatives" for certain options
     const options = {
       setAutotitle: !opts.dontSetAutotitle,
       fixHref: !opts.dontFixHref,
@@ -105,10 +109,19 @@ async function main(files: string[], opts: Options) {
       keepStaleFragments: !!opts.keepStaleFragments,
     }
 
+    // Remember, updateInternalLinks() doesn't actually change the files
+    // on disk. That's the responsibility of the caller, i.e. this CLI script.
+    // The reason why is that updateInternalLinks() can then see if ALL
+    // improvements are going to work. For example, if you tried run
+    // it across 10 links and the 7th one had a corrupt broken link that
+    // can't be corrected, it needs to fail there and then instead of
+    // leaving 6 of the 10 files changed.
     const results = await updateInternalLinks(actualFiles, options)
 
     let exitCheck = 0
-    // Serialize every output before writing, so a late failure leaves the checkout unchanged.
+    // Serializing can throw, and a throw halfway through the loop would leave a
+    // half-updated checkout. Every output is computed first so a failure on the last
+    // file means nothing was written at all, which is what the comment above promises.
     const pendingWrites: { file: string; output: string }[] = []
     for (const {
       file,
@@ -152,7 +165,8 @@ async function main(files: string[], opts: Options) {
               output: serializeYaml(newContent, newData, differentContent, differentData),
             })
           } else {
-            // serializeMarkdown needs rawContent to preserve frontmatter around the updated body.
+            // Remember the `content` and `newContent` is the "meat" of the
+            // Markdown page. To save it you need the frontmatter data too.
             pendingWrites.push({
               file,
               output: serializeMarkdown(rawContent, content, newContent, newData, differentData),
@@ -170,7 +184,7 @@ async function main(files: string[], opts: Options) {
       }
     }
 
-    // Every serializer succeeded, so file writes cannot be interrupted by serialization errors.
+    // Every serializer succeeded, so the writes can't be interrupted by one of them.
     for (const { file, output } of pendingWrites) {
       fs.writeFileSync(file, output, 'utf-8')
     }
@@ -231,7 +245,8 @@ function printObjectDifference(
   rawContent: string,
   parentKey = '',
 ) {
-  // Callers pass matching frontmatter shapes; this reports only differing array values.
+  // Assume both object are of the same shape, but if a key's value is
+  // an array, and it's different, print that difference.
   for (const [key, value] of Object.entries(objFrom)) {
     const combinedKey = `${parentKey}.${key}`
     const otherValue = objTo[key]
@@ -240,7 +255,7 @@ function printObjectDifference(
       for (let i = 0; i < value.length; i++) {
         const entry = value[i]
         const otherEntry = otherValue[i]
-        // Recurse into array objects so nested frontmatter values report at their parent key.
+        // If it was an array of objects, we need to go deeper!
         if (isObject(entry) && isObject(otherEntry)) {
           printObjectDifference(entry, otherEntry, rawContent, combinedKey)
         } else {
@@ -263,7 +278,7 @@ function printObjectDifference(
   }
 }
 
-// equalObject expects matching shapes and compares leaf values recursively.
+// This assumes them to be the same shape with possibly different node values
 function equalObject(obj1: Record<string, unknown>, obj2: Record<string, unknown>) {
   if (!equalSet(new Set(Object.keys(obj1)), new Set(Object.keys(obj2)))) {
     return false
@@ -272,7 +287,7 @@ function equalObject(obj1: Record<string, unknown>, obj2: Record<string, unknown
     const otherValue = obj2[key]
     if (Array.isArray(value)) {
       if (!Array.isArray(otherValue)) return false
-      // Array entries can be objects, so compare them recursively.
+      // Can't easily compare two arrays because the entries might be objects.
       if (value.length !== otherValue.length) return false
       let i = 0
       for (const each of value) {

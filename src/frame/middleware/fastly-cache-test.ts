@@ -1,13 +1,19 @@
-// Tests Fastly caching by returning timestamped HTML for any routed URL.
-// Path tokens set the HTTP status and cache directives.
-// X-CacheTest-CCMode chooses Surrogate-Control, Cache-Control, or both.
+//
+// This middleware function is intended to be used for testing caching behavior with Fastly.
+// It will intercept ALL URLs that are routed to it and respond with a simple HTML body
+//   containing a timestamp.
+// The logic will detect certain values in the path and set the HTTP status and/or the
+//   Surrogate-Control header value.
+//
+// NOTE: This middleware is intended to be removed once testing is complete!
+//
 import express from 'express'
 import crypto from 'crypto'
 
 const router = express.Router()
 
 router.get('/*path', function (req, res) {
-  // X-CacheTest-Error simulates a site outage for any URL.
+  // If X-CacheTest-Error is set, simulate the site being down (regardless of URL)
   if (req.get('X-CacheTest-Error')) {
     res.status(parseInt(req.get('X-CacheTest-Error') as string)).end()
     return

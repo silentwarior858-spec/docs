@@ -111,8 +111,8 @@ Most {% data variables.product.prodname_copilot %} services require access to yo
 
 | Runner type | Supported regions |
 | ----------- | ----------------- |
-| x64 | `francecentral`, `swedencentral` |
-| arm64 | `francecentral` |
+| x64 | `francecentral`, `swedencentral`, `germanywestcentral`, `northeurope` |
+| arm64 | `francecentral`, `northeurope`, `germanywestcentral` |
 | GPU | `italynorth`, `swedencentral` |
 
 ### Supported regions in Australia

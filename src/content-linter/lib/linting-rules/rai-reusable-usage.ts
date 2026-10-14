@@ -35,11 +35,12 @@ export const raiReusableUsage: Rule = {
       .filter(
         (token: LiquidToken) => token.name === 'data' || token.name === 'indented_data_reference',
       )
-      // Allow RAI content to reference variables.
+      // It's ok to reference variables from rai content
       .filter((token: LiquidToken) => !token.args.startsWith('variables'))
 
     for (const token of tokens) {
-      // data and indented_data_reference tokens put the reusable path first.
+      // if token is 'data  foo.bar` or `indented_data_reference foo.bar  depth=3`
+      // we only want the `foo.bar` part.
       const dataDirectoryReference = token.args.split(/\s+/)[0]
       if (dataDirectoryReference.startsWith('reusables.rai')) continue
 
@@ -60,9 +61,11 @@ export const raiReusableUsage: Rule = {
   },
 }
 
-// RAI content can live in data/reusables/rai or anywhere under content.
+// Rai file content can be in either the data/reusables/rai directory
+// or anywhere in the content directory
 function isFileRai(params: RuleParams): boolean {
-  // Tests set ROOT to src/fixtures/fixtures; production uses the repository root.
+  // ROOT is set in the test environment to src/fixtures/fixtures otherwise
+  // it is set to the root of the project.
   const ROOT = process.env.ROOT || '.'
   const dataPath = path.join(ROOT, 'data/reusables')
   const dataRai = path.join(dataPath, 'rai')

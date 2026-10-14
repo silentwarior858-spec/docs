@@ -212,7 +212,8 @@ describe('audit log event filtering', () => {
     }
     const auditLogPage = 'user'
 
-    // filterAndUpdateGhesDataByAllowlistValues mutates currentEvents in place.
+    // this function mutates `currentEvents` so is updated as new GHES versioned
+    // events from `eventToProcess` are processed and added.
     await filterAndUpdateGhesDataByAllowlistValues({
       eventsToCheck: eventsToProcess,
       allowListValue: 'user',

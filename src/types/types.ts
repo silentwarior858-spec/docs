@@ -8,7 +8,7 @@ import type { JourneyContext } from '@/journeys/lib/journey-path-resolver'
 import type { MiniTocItem } from '@/frame/lib/get-mini-toc-items'
 import type { UIStrings } from '@/frame/components/context/MainContext'
 
-// Shared by landing pages and carousels.
+// Shared type for resolved article information used across landing pages and carousels
 export interface ResolvedArticle {
   title: string
   intro: string
@@ -16,7 +16,10 @@ export interface ResolvedArticle {
   category: string[]
 }
 
-// ExtendedRequest collects properties middleware attaches to Request, including req.context.
+// Throughout our codebase we "extend" the Request object by attaching
+// things to it. For example `req.context = { currentCategory: 'foo' }`.
+// This type aims to match all the custom things we do to requests
+// througout the codebase.
 export type ExtendedRequest = Request & {
   pagePath?: string
   context?: Context
@@ -26,9 +29,12 @@ export type ExtendedRequest = Request & {
   FailBot?: Failbot
 }
 
-// Hand-maintained to match schema in frame/lib/frontmatter.ts.
-// Generating it from the AJV schema would need extra build tooling because
-// the schema is built dynamically with version-specific properties.
+// This type is manually maintained based on `schema` in frame/lib/frontmatter.ts
+// We're not auto-generating this from the AJV schema because:
+// 1. It would require significant build tooling (json-schema-to-typescript or similar)
+// 2. The schema is dynamically constructed with version-specific properties
+// 3. Manual maintenance provides better type control and documentation
+// 4. The effort/benefit tradeoff doesn't justify the complexity
 export type PageFrontmatter = {
   title: string
   versions: FrontmatterVersions
@@ -111,7 +117,7 @@ type Redirects = {
 }
 
 export type Context = {
-  // Context allows dynamic keys for features and version short names.
+  // Allows dynamic properties like features & version shortnames as keys
   [key: string]: unknown
   currentCategory?: string
   currentJourneyTrack?: JourneyContext | null
@@ -280,6 +286,7 @@ export type SecretScanningData = {
   isduplicate: boolean
 }
 
+// Language and Languages types are imported at the top from languages-server
 export type { Language, Languages }
 
 export type Permalink = {
@@ -427,8 +434,10 @@ export type AllVersions = {
   [name: string]: Version
 }
 
-// Cast req.query to this type when building URLSearchParams.
-// TypeScript rejects values that are safe at runtime.
+// Use this when constructing a URLSearchParams object from a `req.query`.
+// E.g. `const sp = new URLSearchParams(req.query as URLSearchParamsTypes)`
+// It's useful because otherwise you might get a TypeScript error that
+// is not possible to happen at runtime.
 export type URLSearchParamsTypes = string | string[][] | Record<string, string> | URLSearchParams
 
 export type FeatureData = {
@@ -438,7 +447,8 @@ export type Versions = {
   versions: FrontmatterVersions
 }
 
-// Fields parsed from .md frontmatter; the full schema allows more fields.
+// Used for parsing .md pages with YAML frontmatter
+// This is not the full list available in the frontmatter schema
 export type MarkdownFrontmatter = {
   title: string
   shortTitle?: string

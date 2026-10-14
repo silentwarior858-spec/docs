@@ -1,7 +1,9 @@
-// Shows how different analyzers tokenize text. Requires an Elasticsearch index.
-// Usage: npm run analyze-text -- -V dotcom -l en "The name of the wind"
-
-import { pathToFileURL } from 'url'
+// See how a piece of text gets turned into tokens by the different analyzers.
+// Requires that the index exists in Elasticsearch.
+//
+// Example:
+//
+//  npm run analyze-text -- -V dotcom -l en "The name of the wind"
 
 import { Client } from '@elastic/elasticsearch'
 import { Command, Option } from 'commander'
@@ -13,10 +15,24 @@ import { allVersions } from '@/versions/lib/all-versions'
 
 import type { estypes } from '@elastic/elasticsearch'
 
-// Reads ELASTICSEARCH_URL from .env when the shell environment lacks it.
+// Now you can optionally have set the ELASTICSEARCH_URL in your .env file.
 dotenv.config()
 
-// Collects the supported short CLI version names so Commander can validate -V input.
+// Create an object that maps the "short name" of a version to
+// all information about it. E.g.
+//
+//   {
+//    'ghes-3.5': {
+//       hasNumberedReleases: true,
+//       currentRelease: '3.5',
+//       version: 'enterprise-server@3.5',
+//       miscBaseName: 'ghes-'
+//       ...
+//    },
+//    ...
+//
+// We need this later to be able to map CLI arguments to what the
+// records are called when found on disk.
 const shortNames: Record<string, (typeof allVersions)[keyof typeof allVersions]> =
   Object.fromEntries(
     Object.values(allVersions).map((info) => {
@@ -47,24 +63,20 @@ program
   .addOption(
     new Option('-l, --language <LANGUAGE>', 'Which language to focus on').choices(languageKeys),
   )
-  .addOption(
-    new Option('--not-language <LANGUAGE>', 'Exclude a specific language').choices(languageKeys),
-  )
+  .option('--not-language <LANGUAGE>', 'Exclude a specific language')
   .option('-u, --elasticsearch-url <url>', 'If different from $ELASTICSEARCH_URL')
   .option('--index-prefix <PREFIX>', 'Prefix for the index name')
   .argument('<text>', 'text to tokenize')
+  .parse(process.argv)
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  program.parse(process.argv)
-  const options = program.opts<Options>()
-  const args: string[] = program.args
+const options = program.opts<Options>()
+const args: string[] = program.args
 
-  try {
-    await main(options, args)
-  } catch (err) {
-    console.error(chalk.red('Error:'), err)
-    process.exit(1)
-  }
+try {
+  await main(options, args)
+} catch (err) {
+  console.error(chalk.red('Error:'), err)
+  process.exit(1)
 }
 
 async function main(opts: Options, textArgs: string[]): Promise<void> {
@@ -77,7 +89,7 @@ async function main(opts: Options, textArgs: string[]): Promise<void> {
   }
   let node = opts.elasticsearchUrl || process.env.ELASTICSEARCH_URL!
 
-  // Add http:// to host:port inputs such as localhost:9200.
+  // Allow the user to lazily set it to `localhost:9200` for example.
   if (!node.startsWith('http') && !node.startsWith('://') && node.split(':').length === 2) {
     node = `http://${node}`
   }
@@ -90,8 +102,13 @@ async function main(opts: Options, textArgs: string[]): Promise<void> {
     return
   }
 
-  const { verbose } = opts
-  const languagesToAnalyze = getLanguagesToAnalyze(opts)
+  const { verbose, language, notLanguage } = opts
+
+  // The notLanguage is useful if you want to, for example, index all languages
+  // *except* English.
+  if (language && notLanguage) {
+    throw new Error("Can't combine --language and --not-language")
+  }
 
   if (verbose) {
     console.log(`Connecting to ${chalk.bold(safeUrlDisplay(node))}`)
@@ -99,43 +116,24 @@ async function main(opts: Options, textArgs: string[]): Promise<void> {
 
   const client = new Client({ node })
 
+  // This will throw if it can't ping
   await client.ping()
 
   const versionKey = opts.version || 'dotcom'
   if (verbose) {
     console.log(`Analyzing on version ${chalk.bold(versionKey)}`)
   }
+  const languageKey = opts.language || 'en'
   if (verbose) {
-    console.log(`Analyzing on languages ${chalk.bold(languagesToAnalyze.join(', '))}`)
+    console.log(`Analyzing on language ${chalk.bold(languageKey)}`)
   }
 
   const { indexPrefix } = opts
   const prefix = indexPrefix ? `${indexPrefix}_` : ''
 
-  for (const languageKey of languagesToAnalyze) {
-    const indexName = `${prefix}github-docs-${versionKey}-${languageKey}`
-    console.log(chalk.yellow(`Analyzing in ${chalk.bold(indexName)}`))
-    await analyzeVersion(client, texts, indexName)
-  }
-}
-
-export function getLanguagesToAnalyze({
-  language,
-  notLanguage,
-}: Pick<Options, 'language' | 'notLanguage'>): string[] {
-  if (language && notLanguage) {
-    throw new Error("Can't combine --language and --not-language")
-  }
-
-  if (language) {
-    return [language]
-  }
-
-  if (notLanguage) {
-    return languageKeys.filter((languageKey) => languageKey !== notLanguage)
-  }
-
-  return ['en']
+  const indexName = `${prefix}github-docs-${versionKey}-${languageKey}`
+  console.log(chalk.yellow(`Analyzing in ${chalk.bold(indexName)}`))
+  await analyzeVersion(client, texts, indexName)
 }
 
 function safeUrlDisplay(url: string): string {

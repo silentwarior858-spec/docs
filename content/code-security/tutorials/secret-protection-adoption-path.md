@@ -5,9 +5,7 @@ allowTitleToDifferFromFilename: true
 intro: 'Leaked credentials expose your organization to data breaches. {% data variables.product.prodname_GH_secret_protection %} detects and prevents secret leaks automatically. Follow this five-phase adoption path to assess your current risk, evaluate {% data variables.product.prodname_GH_secret_protection %}, run a pilot, monitor its value, and scale protection across your organization.'
 layout: journey-landing
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: secret-risk-assessment
 contentType: tutorials
 category:
   - Secure at scale

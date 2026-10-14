@@ -1,6 +1,15 @@
-// These tests need indexed fixtures and ELASTICSEARCH_URL.
-// Run ELASTICSEARCH_URL=http://localhost:9200 npm run index-test-fixtures.
-// The command writes tests_-prefixed indexes and leaves regular indexes alone.
+/**
+ * To be able to run these tests you need to index the fixtures!
+ * And you need to have an Elasticsearch URL to connect to for the server.
+ *
+ * To index the fixtures, run:
+ *
+ *   ELASTICSEARCH_URL=http://localhost:9200 npm run index-test-fixtures
+ *
+ * This will replace any "real" Elasticsearch indexes you might have so
+ * once you're done working on vitest tests you need to index real
+ * content again.
+ */
 
 import { expect, test, vi } from 'vitest'
 import { describeIfElasticsearchURL } from '@/tests/helpers/conditional-runs'
@@ -14,12 +23,15 @@ if (!process.env.ELASTICSEARCH_URL) {
   )
 }
 
+// This suite only runs if $ELASTICSEARCH_URL is set.
 describeIfElasticsearchURL('search v1 middleware', () => {
   vi.setConfig({ testTimeout: 60 * 1000 })
 
-  // src/search/tests/fixtures/search-indexes/tests_github-docs_general-search_fpt_en-records.json has title "Foo".
   test('basic search', async () => {
     const sp = new URLSearchParams()
+    // To see why this will work,
+    // see src/search/tests/fixtures/search-indexes/github-docs-dotcom-en-records.json
+    // which clearly has a record with the title "Foo"
     sp.set('query', 'foo')
     const res = await get(`/api/search/v1?${sp.toString()}`)
     expect(res.statusCode).toBe(200)
@@ -33,22 +45,24 @@ describeIfElasticsearchURL('search v1 middleware', () => {
     expect(results.meta.took.query_msec).toBeGreaterThanOrEqual(0)
     expect(results.meta.took.total_msec).toBeGreaterThanOrEqual(0)
 
-    // Search hits can be empty, but the response always returns an array.
+    // Might be empty but at least an array
     expect(results.hits).toBeTruthy()
-    // The word foo appears in more than one fixture document.
+    // The word 'foo' appears in more than 1 document in the fixtures.
     expect(results.hits.length).toBeGreaterThanOrEqual(1)
-    // Only one fixture title includes foo, so that hit comes first.
+    // ...but only one has the word "foo" in its title so we can
+    // be certain it comes first.
     const hit: GeneralSearchHit = results.hits[0]
-    // The API returns the fixture source.url unchanged.
+    // This specifically checks what we expect of version v1
     expect(hit.url).toBe('/en/foo')
     expect(hit.title).toBe('Foo')
     expect(hit.breadcrumbs).toBe('fooing')
-    // Default highlights include title and content, not headings.
+    // By default, 'title' and 'content' is included in highlights,
+    // but not 'headings'
     expect(hit.highlights.title[0]).toBe('<mark>Foo</mark>')
     expect(hit.highlights.content[0]).toMatch('<mark>foo</mark>')
     expect(hit.highlights.headings).toBeUndefined()
 
-    // Search responses must be CDN-cacheable.
+    // Check that it can be cached at the CDN
     expect(res.headers['set-cookie']).toBeUndefined()
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
@@ -60,11 +74,11 @@ describeIfElasticsearchURL('search v1 middleware', () => {
   test('debug search', async () => {
     const sp = new URLSearchParams()
     sp.set('query', 'foo')
-    sp.set('debug', '1')
+    sp.set('debug', '1') // Note!
     const res = await get(`/api/search/v1?${sp.toString()}`)
     expect(res.statusCode).toBe(200)
     const results: GeneralSearchResponse = JSON.parse(res.body)
-    // The fixture query returns a deterministic first hit.
+    // safe because we know exactly the fixtures
     const hit: GeneralSearchHit = results.hits[0]
     expect(hit.popularity).toBeTruthy()
     expect(hit.score).toBeTruthy()
@@ -72,18 +86,21 @@ describeIfElasticsearchURL('search v1 middleware', () => {
   })
 
   test('search with and without autocomplete on', async () => {
-    // Leave autocomplete unset to verify the stemmed term does not match.
+    // *Without* autocomplete=true
     {
       const sp = new URLSearchParams()
       sp.set('query', 'sill')
       const res = await get(`/api/search/v1?${sp.toString()}`)
       expect(res.statusCode).toBe(200)
       const results: GeneralSearchResponse = JSON.parse(res.body)
-      // The fixture term silly stems to silli; without autocomplete, query sill does not match it.
+      // Fixtures contains no word called 'sill'. It does contain the term
+      // 'silly' which, in English, becomes 'silli` when stemmed.
+      // Because we don't use `&autocomplete=true` this time, we expect
+      // to find nothing.
       expect(results.meta.found.value).toBe(0)
     }
 
-    // Enable autocomplete so sill can match silly.
+    // *With* autocomplete=true
     {
       const sp = new URLSearchParams()
       sp.set('query', 'sill')
@@ -125,7 +142,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
 
   test('highlights keys matches highlights configuration', async () => {
     const sp = new URLSearchParams()
-    // Fact of life appears in content, not headings.
+    // This will match because it's in the 'content' but not in 'headings'
     sp.set('query', 'Fact of life')
     sp.set('highlights', 'title')
     const res = await get(`/api/search/v1?${sp.toString()}`)
@@ -154,7 +171,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
   })
 
   test('invalid parameters', async () => {
-    // Missing query.
+    // query is not even present
     {
       const res = await get('/api/search/v1')
       expect(res.statusCode).toBe(400)
@@ -164,7 +181,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toBeTruthy()
     }
-    // Whitespace-only query.
+    // query is just whitespace
     {
       const sp = new URLSearchParams()
       sp.set('query', '  ')
@@ -176,7 +193,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toBeTruthy()
     }
-    // Unrecognized language.
+    // unrecognized language
     {
       const sp = new URLSearchParams()
       sp.set('query', 'test')
@@ -189,7 +206,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toMatch('language')
     }
-    // Unrecognized page.
+    // unrecognized page
     {
       const sp = new URLSearchParams()
       sp.set('query', 'test')
@@ -202,7 +219,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toMatch('page')
     }
-    // Unrecognized version.
+    // unrecognized version
     {
       const sp = new URLSearchParams()
       sp.set('query', 'test')
@@ -216,7 +233,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       expect(errorResponse.error).toMatch("'xxxxx'")
       expect(errorResponse.field).toMatch('version')
     }
-    // Unrecognized size.
+    // unrecognized size
     {
       const sp = new URLSearchParams()
       sp.set('query', 'test')
@@ -229,7 +246,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toMatch('size')
     }
-    // Unrecognized sort.
+    // unrecognized sort
     {
       const sp = new URLSearchParams()
       sp.set('query', 'test')
@@ -242,7 +259,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toMatch('sort')
     }
-    // Unrecognized highlights.
+    // unrecognized highlights
     {
       const sp = new URLSearchParams()
       sp.set('query', 'test')
@@ -255,7 +272,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
       }
       expect(errorResponse.error).toMatch('neverheardof')
     }
-    // Multiple query keys.
+    // multiple 'query' keys
     {
       const sp = new URLSearchParams()
       sp.append('query', 'test1')
@@ -276,7 +293,7 @@ describeIfElasticsearchURL('search v1 middleware', () => {
     const res = await get(`/api/search/v1?${sp.toString()}`)
     expect(res.statusCode).toBe(200)
     const results: GeneralSearchResponse = JSON.parse(res.body)
-    // The fixture query returns a deterministic first hit.
+    // safe because we know exactly the fixtures
     const hit: GeneralSearchHit = results.hits[0]
     expect(hit.breadcrumbs).toBe('')
   })
@@ -345,7 +362,8 @@ describeIfElasticsearchURL('filter by toplevel', () => {
     const res = await get(`/api/search/v1?${sp.toString()}`)
     expect(res.statusCode).toBe(200)
     const results: GeneralSearchResponse = JSON.parse(res.body)
-    // The fixtures include two toplevel values that match foo.
+    // In the fixtures, there are two distinct `toplevel` that
+    // matches to this search.
     const toplevels = new Set(results.hits.map((hit) => hit.toplevel))
     expect(toplevels).toEqual(new Set(['Fooing', 'Baring']))
   })

@@ -21,8 +21,7 @@ describe('home page', () => {
     for (const href of hrefs) {
       if (!href.attr('href')?.startsWith('https://')) {
         const res = await get(href.attr('href')!)
-        // Product group links resolve without redirects.
-        expect(res.statusCode).toBe(200)
+        expect(res.statusCode).toBe(200) // Not needing to redirect
         expect(href.text().includes('{%')).toBe(false)
       } else {
         externalLinks++

@@ -1,3 +1,5 @@
+// This schema enforces the structure in model-supported-plans.yml
+
 const modelSupportedPlansSchema = {
   type: 'object',
   additionalProperties: false,

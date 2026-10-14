@@ -5,7 +5,11 @@ import { defaultCacheControl } from '@/frame/middleware/cache-control'
 
 const router = express.Router()
 
-// Example: /api/webhooks/v1?category=check_run&version=free-pro-team%40latest
+// Returns a webhook for the given category and version
+//
+// Example request:
+//
+//   /api/webhooks/v1?category=check_run&version=free-pro-team%40latest
 router.get('/v1', async function webhooks(req, res) {
   if (!req.query.category) {
     res.status(400).json({ error: "Missing 'category' in query string" })

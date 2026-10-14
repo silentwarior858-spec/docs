@@ -8,6 +8,8 @@ import {
   buildReleaseNotesYaml,
 } from '@/ghes-releases/lib/parse-release-notes'
 
+// ─── extractYaml ─────────────────────────────────────────────────────────────
+
 describe('extractYaml', () => {
   test('extracts YAML from a fenced code block', () => {
     const input = `Here is the release note:
@@ -44,6 +46,8 @@ Some trailing text that is not YAML`
   })
 })
 
+// ─── extractSkipReason ───────────────────────────────────────────────────────
+
 describe('extractSkipReason', () => {
   test('extracts reason from "# SKIP: <reason>"', () => {
     expect(extractSkipReason('# SKIP: Not applicable to GHES')).toBe('Not applicable to GHES')
@@ -53,6 +57,8 @@ describe('extractSkipReason', () => {
     expect(extractSkipReason('- heading: Foo\n  notes:\n    - bar')).toBeNull()
   })
 })
+
+// ─── parseNoteEntries ────────────────────────────────────────────────────────
 
 describe('parseNoteEntries', () => {
   const sourceUrl = 'https://github.com/github/releases/issues/1234'
@@ -101,6 +107,8 @@ describe('parseNoteEntries', () => {
     expect(entries[0].notes).toEqual(['Valid note.'])
   })
 })
+
+// ─── loadExistingEntriesFromString ───────────────────────────────────────────
 
 describe('loadExistingEntriesFromString', () => {
   test('parses feature entries with source URL comments', () => {
@@ -256,6 +264,8 @@ sections:
   })
 })
 
+// ─── buildReleaseNotesYaml ───────────────────────────────────────────────────
+
 describe('buildReleaseNotesYaml', () => {
   const featureHeadings = ['GitHub Actions', 'Repositories', 'APIs']
 
@@ -270,6 +280,7 @@ describe('buildReleaseNotesYaml', () => {
     const reposIdx = yaml.indexOf('- heading: Repositories')
     expect(actionsIdx).toBeGreaterThan(-1)
     expect(reposIdx).toBeGreaterThan(-1)
+    // GitHub Actions comes before Repositories in featureHeadings
     expect(actionsIdx).toBeLessThan(reposIdx)
 
     expect(yaml).toContain('Actions note.')
@@ -282,6 +293,7 @@ describe('buildReleaseNotesYaml', () => {
     ]
     const yaml = buildReleaseNotesYaml(entries, false, featureHeadings)
 
+    // Should appear under changes, not features
     expect(yaml).toContain('  features:\n    # TODO: Add feature notes')
     expect(yaml).toContain('  changes:')
     expect(yaml).toContain('# https://example.com/1')
@@ -303,6 +315,7 @@ describe('buildReleaseNotesYaml', () => {
     expect(yaml).toContain('Deprecating X.')
     expect(yaml).toContain('  retired:\n    # https://example.com/2')
     expect(yaml).toContain('Removed Y.')
+    // Changes should be omitted since Closing down/Retired are excluded and no other entries exist
     expect(yaml).not.toContain('  changes:')
   })
 
@@ -311,7 +324,8 @@ describe('buildReleaseNotesYaml', () => {
 
     expect(yaml).toContain('# TODO: Add feature notes')
     expect(yaml).toContain('# TODO: Add known issues')
-    // Omit empty changes, closing_down, and retired so schema validation does not see null sections.
+    // Empty changes, closing_down, and retired are omitted entirely
+    // to avoid YAML parsing as null (which fails schema validation)
     expect(yaml).not.toContain('  changes:')
     expect(yaml).not.toContain('  closing_down:')
     expect(yaml).not.toContain('  retired:')

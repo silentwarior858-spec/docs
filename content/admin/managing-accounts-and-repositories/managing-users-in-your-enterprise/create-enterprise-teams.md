@@ -12,8 +12,6 @@ redirect_from:
 contentType: how-tos
 category:
   - Manage accounts and repositories
-docsTeamMetrics:
-  - enterprise-onboarding
 ---
 
 To simplify administration at scale, you can create enterprise teams. {% data reusables.enterprise.enterprise-teams-can %}

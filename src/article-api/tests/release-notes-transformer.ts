@@ -6,7 +6,9 @@ import {
   renderReleaseNotesMarkdown,
 } from '@/article-api/transformers/release-notes-transformer'
 
-// The mock removes the fixture dependency and verifies markdownRequested reaches renderContent.
+// Mock renderContent so the unit tests don't need fixtures and so we can
+// assert that markdownRequested: true is always threaded through. The mock
+// returns the input unchanged so we can verify the output shape.
 vi.mock('@/content-render/index', () => ({
   renderContent: vi.fn(async (template: string, ctx: { markdownRequested?: boolean }) => {
     if (!ctx?.markdownRequested) {
@@ -16,7 +18,9 @@ vi.mock('@/content-render/index', () => ({
   }),
 }))
 
-// Empty release data makes the "release not found" transform branch deterministic.
+// Mock the release notes loader so the unit tests don't depend on fixtures
+// existing on disk. Returns empty data, which makes the "release not found"
+// branch in transform() the deterministic outcome.
 vi.mock('@/release-notes/middleware/get-release-notes', () => ({
   getReleaseNotes: vi.fn(() => ({})),
 }))
@@ -136,6 +140,7 @@ describe('renderReleaseNotesMarkdown', () => {
     const out = await renderReleaseNotesMarkdown('Title', '', [samplePatch()], makeContext())
 
     expect(out).toContain('### Known issues')
+    // Heading is a top-level bullet, sub-notes are nested under it.
     expect(out).toContain('- **Instance administration**')
     expect(out).toMatch(
       /- \*\*Instance administration\*\*\n {2}- Sub note one\.\n {2}- Sub note two\./,

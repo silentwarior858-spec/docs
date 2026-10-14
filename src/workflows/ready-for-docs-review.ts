@@ -13,34 +13,45 @@ import {
   type ItemData,
 } from './projects'
 
-// Copilot PRs use their first non-Copilot assignee as the human contributor.
+/**
+ * Determines if a PR is authored by Copilot and extracts the human assignee
+ * @param data GraphQL response data containing PR information
+ * @returns Object with isCopilotAuthor boolean and copilotAssignee string
+ */
 function getCopilotAuthorInfo(data: ItemData): {
   isCopilotAuthor: boolean
   copilotAssignee: string
 } {
   const item = data.item
 
+  // Check if this is a Copilot-authored PR
   const isCopilotAuthor = !!(
     item.__typename === 'PullRequest' &&
     item.author &&
     item.author.login === 'copilot-swe-agent'
   )
 
-  // copilot-swe-agent is usually an assignee too, so skip it.
+  // For Copilot PRs, find the appropriate assignee (excluding Copilot itself)
   let copilotAssignee = ''
   if (isCopilotAuthor && item.assignees && item.assignees.nodes) {
     const assigneeLogins = item.assignees.nodes
       .map((assignee) => assignee.login)
       .filter((login) => login !== 'copilot-swe-agent')
 
+    // Use the first non-Copilot assignee
     copilotAssignee = assigneeLogins.length > 0 ? assigneeLogins[0] : ''
   }
 
   return { isCopilotAuthor, copilotAssignee: copilotAssignee || '' }
 }
 
-// The value for the board's "Contributor" field, which depends on whether
-// Copilot authored the PR and whether the author is a first-time contributor.
+/**
+ * Determines the appropriate author field value based on contributor type
+ * @param isCopilotAuthor Whether the PR is authored by Copilot
+ * @param copilotAssignee The human assignee for Copilot PRs (empty string if none)
+ * @param firstTimeContributor Whether this is a first-time contributor
+ * @returns The formatted author field value
+ */
 function getAuthorFieldValue(
   isCopilotAuthor: boolean,
   copilotAssignee: string,
@@ -58,6 +69,7 @@ function getAuthorFieldValue(
 }
 
 async function run() {
+  // Get info about the docs-content review board project
   const data = (await graphql(
     `
       query ($organization: String!, $projectNumber: Int!, $id: ID!) {
@@ -114,8 +126,10 @@ async function run() {
     },
   )) as ProjectV2Data & ItemData
 
+  // Get the project ID
   const projectID = data.organization.projectV2.id
 
+  // Get the ID of the fields that we want to populate
   const datePostedID = findFieldID('Date posted', data)
   const reviewDueDateID = findFieldID('Review due date', data)
   const statusID = findFieldID('Status', data)
@@ -124,21 +138,28 @@ async function run() {
   const sizeTypeID = findFieldID('Size', data)
   const authorID = findFieldID('Contributor', data)
 
+  // Get the ID of the single select values that we want to set
   const readyForReviewID = findSingleSelectID('Ready for review', 'Status', data)
   const hubberTypeID = findSingleSelectID('Hubber or partner', 'Contributor type', data)
   const docsMemberTypeID = findSingleSelectID('Docs team', 'Contributor type', data)
   const osContributorTypeID = findSingleSelectID('OS contributor', 'Contributor type', data)
 
+  // Add the PR to the project
   const newItemID = await addItemToProject(process.env.ITEM_NODE_ID || '', projectID)
 
+  // Determine the feature and size
   const feature = getFeature(data)
   const size = getSize(data)
   const sizeType = findSingleSelectID(size, 'Size', data)
 
-  // Bot logins such as dependabot[bot] cannot be resolved as regular GitHub users.
+  // Check if the author is a bot account (e.g. dependabot[bot], github-actions[bot]).
+  // GitHub bot logins end with '[bot]' and cannot be resolved as regular GitHub users,
+  // so we skip any user-specific GraphQL queries for them.
   const isBotAuthor = (process.env.AUTHOR_LOGIN || '').endsWith('[bot]')
 
-  // github/docs PRs from new non-bot contributors use first time contributor instead of the login.
+  // If this is the OS repo, determine if this is a first time contributor
+  // If yes, set the author to 'first time contributor' instead of to the author login
+  // Bot accounts (e.g. dependabot[bot]) are not resolvable as GitHub users, so skip this check.
   let firstTimeContributor
   if (!isBotAuthor && process.env.REPO === 'github/docs') {
     const contributorData: Record<string, unknown> = await graphql(
@@ -204,14 +225,17 @@ async function run() {
   }
   const turnaround = process.env.REPO === 'github/docs' ? 3 : 2
 
+  // Check if this is a Copilot-authored PR and get the human assignee
   const { isCopilotAuthor, copilotAssignee } = getCopilotAuthorInfo(data)
 
+  // Determine the author field value
   const authorFieldValue = getAuthorFieldValue(
     isCopilotAuthor,
     copilotAssignee,
     firstTimeContributor,
   )
 
+  // Generate a mutation to populate fields for the new project item
   const updateProjectV2ItemMutation = generateUpdateProjectV2ItemFieldMutation({
     item: newItemID,
     author: authorFieldValue,
@@ -219,9 +243,10 @@ async function run() {
     feature,
   })
 
+  // Determine which variable to use for the contributor type
   let contributorType
   if (isCopilotAuthor || isBotAuthor) {
-    // Treat Copilot and bot-authored PRs as Docs team.
+    // Treat Copilot and bot-authored PRs (e.g. dependabot[bot]) as Docs team
     contributorType = docsMemberTypeID
   } else if (await isDocsTeamMember(process.env.AUTHOR_LOGIN || '')) {
     contributorType = docsMemberTypeID
@@ -230,7 +255,7 @@ async function run() {
   } else if (process.env.REPO === 'github/docs') {
     contributorType = osContributorTypeID
   } else {
-    // Fall back to hubber so the PR stays visible on the board.
+    // use hubber as the fallback so that the PR doesn't get lost on the board
     contributorType = hubberTypeID
   }
 

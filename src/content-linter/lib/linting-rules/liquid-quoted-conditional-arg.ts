@@ -6,7 +6,17 @@ import { getLiquidTokens, conditionalTags, getPositionData } from '../helpers/li
 import { isStringQuoted } from '../helpers/utils'
 import type { RuleParams, RuleErrorCallback, Rule } from '../../types'
 
-// Quoted Liquid conditional arguments always evaluate to true; comparison operands can stay quoted.
+/*
+  Checks for instances where a Liquid conditional tag's argument is
+   quoted because it will always evaluate to true.
+
+  For example, the following would be flagged:
+  {% if "foo" %}
+  {% ifversion "bar" %}
+
+  Quoted strings used as operands in comparisons are valid and not flagged:
+  {% if entry.provider == "openai" %}
+*/
 
 const comparisonOperators = new Set(['==', '!=', '<>', '<', '>', '<=', '>=', 'contains'])
 
@@ -24,7 +34,7 @@ export const liquidQuotedConditionalArg: Rule = {
         if (
           tokensArray.some((arg, index) => {
             if (!isStringQuoted(arg)) return false
-            // A quoted string is valid as an operand of a comparison operator.
+            // A quoted string is valid as an operand of a comparison operator
             const prev = index > 0 ? tokensArray[index - 1] : ''
             const next = index < tokensArray.length - 1 ? tokensArray[index + 1] : ''
             if (comparisonOperators.has(prev) || comparisonOperators.has(next)) return false
@@ -40,8 +50,9 @@ export const liquidQuotedConditionalArg: Rule = {
     for (const token of tokens) {
       const lines = params.lines
       const { lineNumber, column, length } = getPositionData(token, lines)
-      // lineNumber starts at 1, but lines indexes from 0.
+      // LineNumber starts at 1, but lines is 0-based
       const line = lines[lineNumber - 1].slice(column - 1, column + length)
+      // Trim the first and last character off of the token args
       const replaceWith = token.args.slice(1, token.args.length - 1)
       const replaceString = line.replace(token.args, replaceWith)
 

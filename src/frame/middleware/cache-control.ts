@@ -19,8 +19,9 @@ const ONE_DAY = 24 * ONE_HOUR
 const ONE_WEEK = 7 * ONE_DAY
 const ONE_YEAR = 365 * ONE_DAY
 
-// maxAge is seconds. Keep it at or below 31536000.
-// https://www.ietf.org/rfc/rfc2616.txt
+// Return a function you can pass a Response object to and it will set the `Cache-Control` header.
+// Max age is in seconds.
+// Max age should not be greater than 31536000, per <https://www.ietf.org/rfc/rfc2616.txt>.
 function cacheControlFactory(
   maxAge: number = 0,
   {
@@ -52,14 +53,16 @@ function cacheControlFactory(
   }
 }
 
+// ### These are roughly in order from shortest to longest. ###
+
+// If you do not want caching.
 export const noCacheControl = cacheControlFactory(0)
 
-// 4xx errors get a short cache.
+// Short cache for 4xx errors.
 export const errorCacheControl = cacheControlFactory(ONE_MINUTE)
 
-// Default responses cache for 1 minute in browsers and 10 minutes in the CDN.
-// The CDN can serve stale responses for 1 week while revalidating or on errors.
-// Most responses use this policy.
+// For default cache control, up to one week in cache but much shorter in browser.
+// Most responses are under the default cache control policy.
 const browserCacheControl = cacheControlFactory(ONE_MINUTE)
 const defaultCDNCacheControl = cacheControlFactory(TEN_MINUTES, {
   key: 'surrogate-control',
@@ -72,29 +75,30 @@ export function defaultCacheControl(res: Response): void {
 }
 export const searchCacheControl = defaultCacheControl
 
-// The Accept header can switch content responses between HTML and Markdown.
+// For requests where the response can vary between a HTML and Markdown response
+// using the accept header.
 export function contentTypeCacheControl(res: Response): void {
   defaultCacheControl(res)
   res.append('vary', 'accept')
 }
 
-// Vary by accept-language and x-user-language.
-// x-user-language comes from req.cookie:user_language.
-// Upstream code truncates accept-language to available languages.
+// Vary on language when needed.
+// `x-user-language` is a custom request header derived from `req.cookie:user_language`.
+// `accept-language` is truncated to one of our available languages.
 // https://bit.ly/3u5UeRN
 export function languageCacheControl(res: Response): void {
   defaultCacheControl(res)
   res.append('vary', 'accept-language, x-user-language')
 }
 
-// Homepage redirects also vary by x-user-version.
-// x-user-version comes from req.cookie:user_version.
+// Vary on both language and version for homepage redirects.
+// `x-user-version` is a custom request header derived from `req.cookie:user_version`.
 export function languageAndVersionCacheControl(res: Response): void {
   defaultCacheControl(res)
   res.append('vary', 'accept-language, x-user-language, x-user-version')
 }
 
-// Versioned images, CSS, and prebuilt JS use long browser and CDN caches.
+// Long cache control for versioned assets: such as images, CSS, prebuilt JS.
 const assetBrowserCacheControl = cacheControlFactory(TEN_MINUTES)
 const assetCDNCacheControl = cacheControlFactory(ONE_WEEK, {
   key: 'surrogate-control',
@@ -107,7 +111,7 @@ export function assetCacheControl(res: Response): void {
   assetCDNCacheControl(res)
 }
 
-// Archived pages and assets use long browser and CDN caches.
+// Long caching for archived pages and assets.
 const archivedBrowserCacheControl = cacheControlFactory(TEN_MINUTES)
 const archivedCDNCacheControl = cacheControlFactory(ONE_YEAR, {
   key: 'surrogate-control',

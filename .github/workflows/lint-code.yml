@@ -1,6 +1,8 @@
 name: Lint code
 
-# Catch lint, formatting, and type-check failures before merge.
+# **What it does**: Lints our code to ensure the code matches the specified code style.
+# **Why we have it**: We want some level of consistency to our code.
+# **Who does it impact**: Docs engineering, open-source engineering contributors.
 
 on:
   workflow_dispatch:
@@ -10,7 +12,7 @@ on:
 permissions:
   contents: read
 
-# Cancel older runs for the same ref to save runner time.
+# This allows a subsequently queued workflow run to interrupt previous runs
 concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true

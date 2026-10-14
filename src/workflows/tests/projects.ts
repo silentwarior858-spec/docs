@@ -26,7 +26,8 @@ describe('isDocsTeamMember', () => {
 
     await isDocsTeamMember('heiskr')
 
-    // GraphQL returns null for an unknown slug, so a stale value makes every author a non-member.
+    // The team was renamed from `docs` to `technical-content`. GraphQL returns null rather
+    // than erroring for an unknown slug, so a stale value here fails silently in prod.
     const [, variables] = graphql.mock.calls[0]
     expect(variables.slug).toBe('technical-content')
   })
@@ -47,7 +48,8 @@ describe('isDocsTeamMember', () => {
   test('degrades instead of throwing when the slug no longer resolves', async () => {
     graphql.mockResolvedValue({ organization: { team: null } })
 
-    // Return false so the job keeps populating fields instead of throwing after adding the PR.
+    // Dereferencing the null used to throw and kill the whole job, but only *after* the PR
+    // had been added to the board, leaving an item with none of its fields populated.
     await expect(isDocsTeamMember('heiskr')).resolves.toBe(false)
   })
 

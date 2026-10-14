@@ -15,12 +15,13 @@ describe('autotitle', () => {
         expect($(element).text()).toBe('Hello World')
       }
     })
-    // autotitling.md has 4 AUTOTITLE links.
+    // There are 4 links on the `autotitling.md` content.
     expect.assertions(4)
   })
 
   test('typos lead to error when NODE_ENV !== production', async () => {
-    // typo-autotitling.md contains two AUTOTITLE typos split by {% if version ghes %}.
+    // The fixture typo-autotitling.md contains two different typos
+    // of the word "AUTOTITLE", separated by `{% if version ghes %}`
     {
       const res = await get('/get-started/foo/typo-autotitling', { followRedirects: true })
       expect(res.statusCode).toBe(500)
@@ -47,14 +48,14 @@ describe('cross-version-links', () => {
       const $: CheerioAPI = await getDOM(URL)
       const links = $('#article-contents a[href]')
 
-      // Cross-version links drop hardcoded free-pro-team prefixes.
+      // Tests that the hardcoded prefix is always removed
       const firstLink = links.filter(
         (i: number, element: Element) =>
           $(element).text() === 'Hello world always in free-pro-team',
       )
       expect(firstLink.attr('href')).toBe('/en/get-started/start-your-journey/hello-world')
 
-      // Cross-version links keep explicit enterprise-server targets.
+      // Tests that the second link always goes to enterprise-server@X.Y
       const secondLink = links.filter(
         (i: number, element: Element) =>
           $(element).text() === 'Autotitling page always in enterprise-server latest',
@@ -78,7 +79,7 @@ describe('link-rewriting', () => {
       expect(link.attr('href')).toMatch('/en/get-started/')
     }
 
-    // External, asset, public, and enterprise links keep their original prefixes.
+    // Some links are left untouched
 
     {
       const link = links.filter((i: number, element: Element) =>
@@ -119,7 +120,7 @@ describe('link-rewriting', () => {
   })
 
   test('/en and current version number is injected', async () => {
-    // enterprise-server URLs use numbered releases, unlike enterprise-cloud.
+    // enterprise-server, unlike enterprise-cloud, use numbers
     const $: CheerioAPI = await getDOM(
       '/enterprise-server@latest/get-started/start-your-journey/link-rewriting',
     )

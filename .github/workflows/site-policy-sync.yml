@@ -1,8 +1,12 @@
 name: Site policy sync
 
-# Keeps github/site-policy current with internal site policy docs.
+# **What it does**: Creates a branch in our site-policy repo with changes to site policy docs.
+# **Why we have it**: We want to keep the site-policy repo up to date.
+# **Who does it impact**: site-policy-admins and Developer Policy teams.
 
+# Controls when the action will run.
 on:
+  # Triggers the workflow pull requests merged to the main branch
   pull_request:
     branches:
       - main

@@ -1,4 +1,5 @@
-// Keep TypeScript references in content/contributing in sync with this schema.
+// when updating to typescript,
+// update links in content/contributing as well
 
 import type { SchemaObject } from 'ajv'
 import parse from '@/frame/lib/read-frontmatter'
@@ -57,14 +58,15 @@ export const contentTypesEnum = [
   'how-tos',
   'reference',
   'tutorials',
-  'homepage', // content/index.md only.
-  'landing', // content/<product>/index.md only.
-  'rai', // Files under directories whose names contain responsible-use.
+  'homepage', // Only applies to the sole 'content/index.md' file (the homepage).
+  'landing', // Only applies to 'content/<product>/index.md' files (product landings).
+  'rai', // Only applies to files that live in directories with 'responsible-use' in the name.
   'other', // Everything else.
 ]
 
-// docsTeamMetrics groups related articles by feature or subject across directories.
-export const docsTeamMetricsEnum = ['ai-governance', 'copilot-cli', 'enterprise-onboarding']
+// Values supported in the docsTeamMetrics frontmatter property. Used to track
+// related articles (e.g. by feature or subject) that may span different directories.
+export const docsTeamMetricsEnum = ['copilot-cli', 'enterprise-onboarding']
 
 export const schema: Schema = {
   type: 'object',
@@ -91,11 +93,11 @@ export const schema: Schema = {
       type: 'string',
       translatable: true,
     },
-    // Articles default to true, and all other content defaults to false.
+    // true by default on articles, false on all other content
     showMiniToc: {
       type: 'boolean',
     },
-    // miniTocMaxHeadingLevel is deprecated; accessibility limits mini TOCs to h2.
+    // This frontmatter property is deprecated. Despite what `miniTocMaxHeadingLevel` says, the max level of mini TOC is *always* 2. See github/docs-engineering#2701.
     miniTocMaxHeadingLevel: {
       deprecated: true,
       type: 'number',
@@ -106,15 +108,16 @@ export const schema: Schema = {
     subcategory: {
       type: 'boolean',
     },
-    // early-access can hide articles.
+    // allow hidden articles under `early-access`
     hidden: {
       type: 'boolean',
     },
-    // Early Access articles can opt out of the header notice.
+    // specify whether an Early Access article should not have a header notice
     noEarlyAccessBanner: {
       type: 'boolean',
     },
-    // Early Access products can opt into a TOC; categories and subcategories get one by default.
+    // specify whether an Early Access product should have a table of contents
+    // (EA categories and subcategories have them by default, but products don't)
     earlyAccessToc: {
       type: 'boolean',
     },
@@ -163,14 +166,15 @@ export const schema: Schema = {
           type: 'array',
           items: { type: 'string' },
         },
-        // Popular columns can override their heading.
+        // allows you to use an alternate heading for the popular column
         popularHeading: {
           type: 'string',
           translatable: true,
         },
       },
     },
-    // changelog is deprecated and stays valid because translations still carry it.
+    // DEPRECATED: tied to the removed product-landing layout. Schema entry kept
+    // because translations still carry `changelog:` until they catch up.
     changelog: {
       type: 'object',
       properties: {
@@ -189,13 +193,13 @@ export const schema: Schema = {
       type: 'string',
       enum: contentTypesEnum,
     },
-    // Single-track journey landings can override the articles heading.
+    // Optional heading override for the single-track journey landing UI
     journeyArticlesHeading: {
       type: 'string',
       translatable: true,
       description: 'Override the default "Articles" heading on single-track journey landing pages',
     },
-    // Journey landing pages can define tracks.
+    // Journey tracks for journey landing pages
     journeyTracks: {
       type: 'array',
       items: {
@@ -247,7 +251,8 @@ export const schema: Schema = {
       },
       description: 'Array of journey tracks for journey landing pages',
     },
-    // beta_product is deprecated and stays valid because translations still carry it.
+    // DEPRECATED: tied to the removed product-landing layout. Schema entry kept
+    // because translations still carry `beta_product:` until they catch up.
     beta_product: {
       type: 'boolean',
     },
@@ -276,26 +281,26 @@ export const schema: Schema = {
         },
       },
     },
-    // Platform-specific content defaults to this preference.
+    // Platform-specific content preference
     defaultPlatform: {
       type: 'string',
       enum: ['mac', 'windows', 'linux'],
     },
-    // Tool-specific content defaults to this preference.
-    // allTools keeps the preference list in one place.
+    // Tool-specific content preference, the list of tools are kept in
+    // make it easier to update in a single place
     defaultTool: {
       type: 'string',
       enum: Object.keys(allTools),
     },
-    // Top-level TOCs can define child groups.
+    // Child groups specified on top-level TOC
     childGroups: {
       type: 'array',
     },
-    // TOC pages can define child links.
+    // Child links specified on any TOC page
     children: {
       type: 'array',
     },
-    // The homepage can list external products.
+    // External products specified on the homepage
     externalProducts: {
       type: 'object',
       required: ['electron'],
@@ -312,11 +317,12 @@ export const schema: Schema = {
         },
       },
     },
-    // hidden-docs linter permits pages with experimental alternatives to be hidden.
+    // whether or not the page is mirrored by an experimental page
     hasExperimentalAlternative: {
       type: 'boolean',
     },
-    // Translation metadata stays valid even though this code does not read it.
+    // Translation metadata properties added during the translation process,
+    // we don't use these properties ourselves.
     'ms.openlocfilehash': {
       type: 'string',
     },
@@ -347,6 +353,7 @@ export const schema: Schema = {
         'webhooks',
       ],
     },
+    // START category-landing tags
     category: {
       type: 'array',
       errorMessage: `must be an array, which is written in frontmatter like:
@@ -365,7 +372,8 @@ category:
     octicon: {
       type: 'string',
     },
-    // Category pages can override their sidebar link.
+    // END category landing tags
+    // Custom sidebar link for category pages
     sidebarLink: {
       type: 'object',
       required: ['text', 'href'],
@@ -379,7 +387,7 @@ category:
         },
       },
     },
-    // Category landing pages can define spotlight cards.
+    // Spotlight configuration for category landing pages
     spotlight: {
       type: 'array',
       items: {
@@ -399,7 +407,7 @@ category:
       },
       description: 'Array of articles to feature in the spotlight section',
     },
-    // Cookbook-style category landings can choose visible filters.
+    // Filters to display on cookbook-style category landing pages.
     // Allowed values: 'category' (always shown), 'surface', 'complexity'.
     filters: {
       type: 'array',
@@ -410,7 +418,7 @@ category:
       description:
         'Which filter menus to display on the category landing page. The category filter is always shown.',
     },
-    // Category landing pages can define multiple carousels.
+    // Carousels configuration for category landing pages (supports multiple carousels)
     carousels: {
       type: 'object',
       description: 'Multiple named carousels with articles to feature',
@@ -425,7 +433,7 @@ category:
         },
       },
     },
-    // Article grids can limit their category filter options.
+    // Included categories for article grid filtering
     includedCategories: {
       type: 'array',
       items: {
@@ -436,6 +444,7 @@ category:
   },
 }
 
+// returns a list of deprecated properties
 export const deprecatedProperties = Object.keys(schema.properties).filter((prop: string) => {
   return (schema.properties as Record<string, SchemaProperty>)[prop].deprecated
 })
@@ -455,13 +464,14 @@ const featureVersionsProp = {
 const semverRange = {
   type: 'string',
   format: 'semver',
-  // AJV JSON pointer syntax injects the bad version into the error message.
+  // This is JSON pointer syntax with ajv so we can specify the bad version
+  // in the error message.
   errorMessage: 'Must be a valid SemVer range: ${0}',
 }
 
 ;(schema.properties as Record<string, SchemaProperty>).versions = {
-  type: ['object', 'string'], // '*' means all versions.
-  additionalProperties: false, // Allow only feature plus each version's plan and short name.
+  type: ['object', 'string'], // allow a '*' string to indicate all versions
+  additionalProperties: false, // don't allow any versions in FM that aren't defined in lib/all-versions
   properties: Object.values(allVersions).reduce(
     (acc: Record<string, SchemaProperty>, versionObj) => {
       acc[versionObj.plan] = semverRange
@@ -480,7 +490,7 @@ export function frontmatter(markdown: string, opts: FrontmatterOptions = {}) {
   return parse(markdown, Object.assign({}, defaults, opts))
 }
 
-// CommonJS callers need the schema on the exported function.
+// attach the schema object so it can be `require`d elsewhere.
 frontmatter.schema = schema
 
 export default frontmatter

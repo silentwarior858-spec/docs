@@ -1,5 +1,10 @@
-// Add same-line markdownlint disables when a new rule creates many failures.
-// Run as src/content-linter/scripts/disable-rules.ts no-generic-link-text.
+// Disables markdownlint rules in markdown files with same-line comments. This is
+// useful when introducing a new rule that causes many failures. The comments
+// can be fixed and removed at while updating the file later.
+//
+// Usage:
+//
+//  src/content-linter/scripts/disable-rules.ts no-generic-link-text
 
 import fs from 'fs'
 import { spawn } from 'child_process'
@@ -14,6 +19,7 @@ if (process.argv[3] === '--verbose' || process.argv[3] === '-v') {
   verbose = true
 }
 
+// Cleanup from previous run
 if (fs.existsSync('markdown-violations.json')) {
   fs.unlinkSync('markdown-violations.json')
 }

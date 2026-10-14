@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { slug } from 'github-slugger'
-import cx from 'clsx'
+import cx from 'classnames'
 
 import { HeadingLink } from '@/frame/components/article/HeadingLink'
 import { useTranslation } from '@/languages/components/useTranslation'
@@ -19,7 +19,7 @@ type Props = {
   operation: Operation
 }
 
-// Use this as the default Accept header for REST operations.
+// all REST operations have this accept header by default
 const DEFAULT_ACCEPT_HEADER = {
   name: 'accept',
   type: 'string',
@@ -38,7 +38,7 @@ export function RestOperation({ operation }: Props) {
   const titleSlug = slug(operation.title)
   const { t } = useTranslation('rest_reference')
   const router = useRouter()
-  // Omit the default Accept header for Management Console and GHES Manage APIs.
+  // omit the default header if ghes specific api
   const headers =
     operation.subcategory === 'management-console' || operation.subcategory === 'manage-ghes'
       ? []

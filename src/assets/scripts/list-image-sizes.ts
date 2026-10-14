@@ -1,4 +1,8 @@
-// Lists local image files by pixel area, largest first.
+// [start-readme]
+//
+// This script lists all local image files, sorted by their dimensions.
+//
+// [end-readme]
 
 import { fileURLToPath } from 'url'
 import path from 'path'

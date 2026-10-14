@@ -6,9 +6,7 @@ product: '{% data reusables.gated-features.secret-risk-assessment-report %}'
 permissions: '{% data reusables.permissions.secret-risk-assessment-report-generation %}'
 contentType: how-tos
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: secret-risk-assessment
 redirect_from:
   - /code-security/securing-your-organization/understanding-your-organizations-exposure-to-leaked-secrets/export-risk-report-csv
 category:

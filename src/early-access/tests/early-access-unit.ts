@@ -28,7 +28,7 @@ describeIfDocsEarlyAccess('early access rendering', () => {
   test('404 if any other language than English', async () => {
     for (const code of Object.keys(languages)) {
       if (code === 'en') {
-        // English early access rendering has separate tests above.
+        // This is tested elsewhere
         continue
       }
       const res = await get(`/${code}${VALID_EARLY_ACCESS_URI}`)

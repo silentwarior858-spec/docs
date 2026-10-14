@@ -1,4 +1,5 @@
-import { Banner } from '@/frame/components/ui/Banner'
+import { Flash } from '@primer/react'
+
 import { useTranslation } from '@/languages/components/useTranslation'
 import type { SearchValidationErrorEntry } from '../../types'
 
@@ -15,11 +16,11 @@ export function ValidationErrors({ errors }: Props) {
     <div>
       {errors.map((error) => {
         return (
-          <Banner key={error.error} variant="warning" className={styles.banner}>
+          <Flash key={error.error} variant="warning" className={styles.flash}>
             {t('search_validation_error')}
             <br />
             <code>{error.error}</code>
-          </Banner>
+          </Flash>
         )
       })}
     </div>

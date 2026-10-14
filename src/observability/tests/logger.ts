@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createLogger } from '@/observability/logger'
 
-// Most tests mock logger context; integration coverage lives in logger-integration.ts.
+// Mock only the logger-context for most tests, but we'll test integration without mocks
 vi.mock('@/observability/logger/lib/logger-context')
 
+// Strip ANSI escape codes for easier assertion matching
 function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/\u001B\[\d+m/g, '')
 }
 
+// Check that a dev-mode log line contains the expected level and message
 function expectDevLog(logs: string[], level: string, message: string): void {
   const match = logs.find((log) => {
     const clean = stripAnsi(log)
@@ -25,10 +27,12 @@ describe('createLogger', () => {
   const consoleErrors: unknown[] = []
 
   beforeEach(() => {
+    // Store original environment and console methods
     originalEnv = { ...process.env }
     originalConsoleLog = console.log
     originalConsoleError = console.error
 
+    // Mock console methods to capture output
     console.log = vi.fn((message: string) => {
       consoleLogs.push(message)
     })
@@ -36,14 +40,17 @@ describe('createLogger', () => {
       consoleErrors.push(error)
     })
 
+    // Clear captured output
     consoleLogs.length = 0
     consoleErrors.length = 0
 
+    // Set default environment
     vi.stubEnv('NODE_ENV', 'development')
     vi.stubEnv('LOG_LEVEL', 'debug')
   })
 
   afterEach(() => {
+    // Restore original environment and console methods
     process.env = originalEnv
     console.log = originalConsoleLog
     console.error = originalConsoleError
@@ -91,6 +98,7 @@ describe('createLogger', () => {
     it('should log messages with extra data (Pattern 2)', () => {
       logger.info('User logged in', { userId: 123, email: 'test@example.com' })
       expectDevLog(consoleLogs, 'INFO', 'User logged in')
+      // Extra data should also be present in the log line
       const clean = stripAnsi(consoleLogs[0])
       expect(clean).toContain('userId=')
       expect(clean).toContain('email=')
@@ -180,6 +188,7 @@ describe('createLogger', () => {
     it('should use development format when context is mocked', () => {
       logger.info('Test message')
 
+      // Check that a log was output in development format
       expect(consoleLogs).toHaveLength(1)
       expectDevLog(consoleLogs, 'INFO', 'Test message')
     })
@@ -212,11 +221,11 @@ describe('createLogger', () => {
 
       logger.error('Multiple errors', error1, error2)
 
-      // Development logging prints one console.log and one console.error per Error.
+      // In development mode, each error triggers a separate console.log + console.error
       expect(consoleLogs).toHaveLength(2)
       expect(consoleErrors).toHaveLength(2)
 
-      // Both Error entries share the combined message.
+      // Both log entries should have the same message
       expectDevLog(consoleLogs, 'ERROR', 'Multiple errors: First error, Second error')
       expect(consoleErrors[0]).toBe(error1)
       expect(consoleErrors[1]).toBe(error2)
@@ -227,11 +236,13 @@ describe('createLogger', () => {
     let logger: ReturnType<typeof createLogger>
 
     beforeEach(() => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
     })
 
     it('should respect LOG_LEVEL=error setting', () => {
+      // Mock the function to return error level (0) and dynamically import logger
       vi.stubEnv('LOG_LEVEL', 'error')
 
       logger = createLogger('file:///path/to/test.js')
@@ -284,6 +295,7 @@ describe('createLogger', () => {
     let logger: ReturnType<typeof createLogger>
 
     beforeEach(() => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
       logger = createLogger('file:///path/to/test.js')
@@ -377,6 +389,7 @@ describe('createLogger', () => {
     let logger: ReturnType<typeof createLogger>
 
     beforeEach(() => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
       logger = createLogger('file:///path/to/test.js')
@@ -406,6 +419,7 @@ describe('createLogger', () => {
     it('should prioritize plain objects as extra data over other objects', () => {
       vi.stubEnv('LOG_LIKE_PRODUCTION', 'true')
 
+      // Create new logger instance
       logger = createLogger('file:///path/to/test.js')
 
       const date = new Date()
@@ -416,9 +430,11 @@ describe('createLogger', () => {
       expect(consoleLogs).toHaveLength(1)
       const logOutput = consoleLogs[0]
 
+      // The message should contain the full string with date converted to string
       expect(logOutput).toContain('message="Test')
       expect(logOutput).toContain('string"')
 
+      // The plain object should be in the included context
       expect(logOutput).toContain('included.key=value')
     })
   })
@@ -430,7 +446,7 @@ describe('createLogger', () => {
       vi.stubEnv('KUBE_NODE_HOSTNAME', 'ghe-k8s-node-42')
       vi.stubEnv('LOG_LIKE_PRODUCTION', 'true')
 
-      // Reset modules so pod-identity reads the stubbed environment.
+      // Reset modules so pod-identity is re-evaluated with the new env vars
       vi.resetModules()
       const { createLogger: freshCreateLogger } = await import('@/observability/logger')
 
@@ -446,6 +462,7 @@ describe('createLogger', () => {
 
     it('should not include pod identity fields in logfmt output when env vars are absent', async () => {
       vi.stubEnv('LOG_LIKE_PRODUCTION', 'true')
+      // Ensure pod env vars are absent
       delete process.env.POD_NAME
       delete process.env.POD_NAMESPACE
       delete process.env.KUBE_NODE_HOSTNAME
@@ -530,7 +547,7 @@ describe('createLogger', () => {
       const logOutput = consoleLogs[0]
       expect(logOutput).toContain('included.error="Cannot read property"')
       expect(logOutput).toContain('included.error_name=TypeError')
-      // Undefined error.code serializes as an empty error_code field.
+      // When .code is undefined, error_code is present but empty
       expect(logOutput).toMatch(/included\.error_code= /)
       expect(logOutput).toContain('included.error_stack=')
     })

@@ -1,12 +1,16 @@
 import type { OpenApiMediaType } from './openapi-types'
 
+// In the case that there are more than one example requests, and
+// no content responses, a request with an example key that matches the
+// status code of a response will be matched.
 const DEFAULT_EXAMPLE_DESCRIPTION = 'Example'
 const DEFAULT_EXAMPLE_KEY = 'default'
 const DEFAULT_ACCEPT_HEADER = 'application/vnd.github.v3+json'
 
-// These helpers accept partial operation shapes because they read only request bodies,
-// parameters, and responses. Unknown content maps keep test fixtures assignable until
-// each use casts the value to OpenApiMediaType.
+// These functions only read the request body, parameters, and responses of an
+// operation, so they accept a narrower shape than the full OpenApiOperation.
+// Content maps are typed as `unknown` values (cast to OpenApiMediaType at the
+// point of use) so the partial operation fixtures in tests remain assignable.
 interface CodeSampleParameter {
   in?: string
   name: string
@@ -66,7 +70,10 @@ export interface MergedExample {
   }
 }
 
-// getCodeSamples builds request and response examples, then applies merge rules before rendering.
+// Retrieves request and response examples and attempts to
+// merge them to create matching request/response examples
+// The key used in the media type `examples` property is
+// used to match requests to responses.
 export default async function getCodeSamples(
   operation: CodeSampleOperation,
 ): Promise<MergedExample[]> {
@@ -75,7 +82,8 @@ export default async function getCodeSamples(
 
   const mergedExamples = mergeExamples(requestExamples, responseExamples)
 
-  // Duplicate descriptions get status-code suffixes so each docs example has a distinct label.
+  // If there are multiple examples and if the request body
+  // has the same description, add a number to the example
   if (mergedExamples.length > 1) {
     const count: Record<string, number> = {}
     for (const item of mergedExamples) {
@@ -97,28 +105,33 @@ export default async function getCodeSamples(
     })
   }
 
-  // The key is only needed while merging, not at runtime.
+  // Strip the key field — it's only needed during merging, not at runtime
   for (const example of mergedExamples) delete (example as { key?: string }).key
   return mergedExamples
 }
 
-// mergeExamples applies direct, status-code, and example-key rules to pair requests with responses.
-// If earlier rules do not apply, the fallback path matches request and response example keys.
 export function mergeExamples(
   requestExamples: RequestExample[],
   responseExamples: ResponseExample[],
 ): MergedExample[] {
-  // A lone request without a response cannot create a meaningful docs example.
+  // There is always at least one request example, but it won't create
+  // a meaningful example unless it has a response example.
   if (requestExamples.length === 1 && responseExamples.length === 0) {
     return []
   }
 
-  // A single request and response pair directly, so mismatched OpenAPI example keys still render.
+  // If there is one request and one response example, we don't
+  // need to merge the requests and responses, and we don't need
+  // to match keys directly. This allows falling back in the
+  // case that the existing OpenAPI schema has mismatched example keys.
   if (requestExamples.length === 1 && responseExamples.length === 1) {
     return [{ ...requestExamples[0], response: responseExamples[0].response }]
   }
 
-  // A single request with example-less responses documents success status codes below 300.
+  // If there is a request with no request body parameters and all of
+  // the responses have no content, then we can create a docs
+  // example for just status codes below 300. All other status codes will
+  // be listed in the status code table in the docs.
   if (
     requestExamples.length === 1 &&
     responseExamples.length > 1 &&
@@ -129,7 +142,10 @@ export function mergeExamples(
       .map((ex) => ({ ...requestExamples[0], ...ex }))
   }
 
-  // When one request has multiple responses, only responses with examples become docs examples.
+  // If there is exactly one request example and one or more response
+  // examples, we can make a docs example for the response examples that
+  // have content. All remaining status codes with no content
+  // will be listed in the status code table in the docs.
   if (
     requestExamples.length === 1 &&
     responseExamples.length > 1 &&
@@ -140,11 +156,20 @@ export function mergeExamples(
       .map((ex) => ({ ...requestExamples[0], ...ex }))
   }
 
+  // Finally, we'll attempt to match examples with matching keys.
+  // This iterates through the longer array and compares key values to keys in
+  // the shorter array.
   const requestsExamplesLarger = requestExamples.length >= responseExamples.length
   const target = requestsExamplesLarger ? requestExamples : responseExamples
   const source = requestsExamplesLarger ? responseExamples : requestExamples
 
-  // The longer list drives key matching. Requests win ties on length, and the first key match wins.
+  // Iterates over the larger array or "target" (or if equal requests) to see
+  // if there are any matches in the smaller array or "source"
+  // (or if equal responses) that can be added to target array. If a request
+  // If a request
+  // example and response example have matching keys they will be merged into
+  // an example. If there is more than one key match, the first match will
+  // be used.
   return target
     .filter((targetEx) => {
       const match = source.find((srcEx) => srcEx.key === targetEx.key)
@@ -154,12 +179,30 @@ export function mergeExamples(
     .map((ex) => ex as MergedExample)
 }
 
-// Request examples fall back to path parameters or generic examples when bodies lack examples.
+/*
+  Create an example object for each example in the requestBody property
+  of the schema. Each requestBody can have more than one content type.
+  Each content type can have more than one example. We create an object
+  for each permutation of content type and example.
+  Returns an array of objects in the format:
+  {
+    key,
+    request: {
+      contentType,
+      description,
+      acceptHeader,
+      bodyParameters,
+      parameters,
+    }
+  }
+*/
 export function getRequestExamples(operation: CodeSampleOperation): RequestExample[] {
   const requestExamples: RequestExample[] = []
   const parameterExamples = getParameterExamples(operation)
 
-  // Operations without request bodies or path parameters still need a path-only example.
+  // When no request body or parameters are defined, we create a generic
+  // request example. Not all operations have request bodies or parameters,
+  // but we always want to show at least an example with the path.
   if (!operation.requestBody && Object.keys(parameterExamples).length === 0) {
     return [
       {
@@ -172,7 +215,7 @@ export function getRequestExamples(operation: CodeSampleOperation): RequestExamp
     ]
   }
 
-  // Path parameter examples create requests when an operation has no request body.
+  // When no request body exists, we create an example from the parameters
   if (!operation.requestBody) {
     return Object.keys(parameterExamples).map((key) => {
       return {
@@ -186,10 +229,16 @@ export function getRequestExamples(operation: CodeSampleOperation): RequestExamp
     })
   }
 
+  // Requests can have multiple content types each with their own set of
+  // examples.
   for (const contentType of Object.keys(operation.requestBody.content)) {
     const mediaType = operation.requestBody.content[contentType] as OpenApiMediaType
     let examples: Record<string, { summary?: string; value?: unknown }> = {}
-    // Treat a media type with a singular example field as examples under the default key.
+    // This is a fallback to allow using the `example` property in
+    // the schema. If we start to enforce using examples vs. example using
+    // a linter, we can remove the check for `example`.
+    // For now, we'll use the key default, which is a common default
+    // example name in the OpenAPI schema.
     if (mediaType.example) {
       examples = {
         default: {
@@ -199,7 +248,7 @@ export function getRequestExamples(operation: CodeSampleOperation): RequestExamp
     } else if (mediaType.examples) {
       examples = mediaType.examples
     } else {
-      // Missing media type examples still need a generic request for this content type.
+      // Example for this content type doesn't exist so we'll try and create one
       requestExamples.push({
         key: DEFAULT_EXAMPLE_KEY,
         request: {
@@ -212,8 +261,13 @@ export function getRequestExamples(operation: CodeSampleOperation): RequestExamp
       continue
     }
 
+    // There can be more than one example for a given content type. We need to
+    // iterate over the keys of the examples to create individual
+    // example objects
     for (const key of Object.keys(examples)) {
-      // Custom +json media types must also become the Accept header.
+      // A content type that includes `+json` is a custom media type
+      // The default accept header is application/vnd.github.v3+json
+      // Which would have a content type of `application/json`
       const acceptHeader = contentType.includes('+json')
         ? contentType
         : 'application/vnd.github.v3+json'
@@ -234,7 +288,12 @@ export function getRequestExamples(operation: CodeSampleOperation): RequestExamp
   return requestExamples
 }
 
-// Strip unused example annotations because they add about 131 MB across versioned schemas.
+/*
+  Recursively removes `example` and `examples` annotation fields from a JSON
+  Schema object. These fields are OpenAPI annotation-only and are never read
+  by the runtime rendering code, but they account for ~131 MB of the total
+  schema.json size across all versions.
+*/
 function stripSchemaExamples(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object') return schema
   if (Array.isArray(schema)) return schema.map(stripSchemaExamples)
@@ -247,17 +306,37 @@ function stripSchemaExamples(schema: unknown): unknown {
   return result
 }
 
+/*
+  Create an example object for each example in the response property
+  of the schema. Each response can have more than one status code,
+  each with more than one content type. And each content type can
+  have more than one example. We create an object
+  for each permutation of status, content type, and example.
+  Returns an array of objects in the format:
+  {
+    key,
+    response: {
+      statusCode,
+      contentType,
+      description,
+      example,
+    }
+  }
+*/
 export function getResponseExamples(operation: CodeSampleOperation): ResponseExample[] {
   const responseExamples: ResponseExample[] = []
   const responses = operation.responses as Record<string, CodeSampleResponse>
   for (const statusCode of Object.keys(responses)) {
-    // Error responses already render in the docs status code table.
+    // We don't want to create examples for error codes
+    // Error codes are displayed in the status table in the docs
     if (parseInt(statusCode, 10) >= 400) continue
 
     const response = responses[statusCode]
     const content = response.content as Record<string, unknown> | undefined
 
-    // Responses without content still need a status-code example.
+    // A response doesn't always have content (ex:, status 304)
+    // In this case we create a generic example for the status code
+    // with a key that matches the status code.
     if (!content) {
       const example = {
         key: statusCode,
@@ -270,10 +349,16 @@ export function getResponseExamples(operation: CodeSampleOperation): ResponseExa
       continue
     }
 
+    // Responses can have multiple content types each with their own set of
+    // examples.
     for (const contentType of Object.keys(content)) {
       const mediaType = content[contentType] as OpenApiMediaType
       let examples: Record<string, { summary?: string; value?: unknown }> = {}
-      // Status-code keys prevent collisions for operations with success responses like 200 and 201.
+      // This is a fallback to allow using the `example` property in
+      // the schema. If we start to enforce using examples vs. example using
+      // a linter, we can remove the check for `example`.
+      // We key by statusCode so that operations with multiple success
+      // responses (e.g. 200 + 201) get unique keys instead of colliding.
       if (mediaType.example) {
         examples = {
           [statusCode]: {
@@ -283,7 +368,12 @@ export function getResponseExamples(operation: CodeSampleOperation): ResponseExa
       } else if (mediaType.examples) {
         examples = mediaType.examples
       } else if (parseInt(statusCode, 10) < 300) {
-        // Missing success examples still render so a 304 is not the only default example.
+        // Sometimes there are missing examples for say a 200 response and
+        // the operation also has a 304 no content status. If we don't add
+        // the 200 response example, even though it has not example response,
+        // the resulting responseExamples would only contain the 304 response.
+        // That would be confusing in the docs because it's expected to see the
+        // common or success responses by default.
         const example = {
           key: statusCode,
           response: {
@@ -294,9 +384,15 @@ export function getResponseExamples(operation: CodeSampleOperation): ResponseExa
         responseExamples.push(example)
         continue
       } else {
+        // Example for this content type doesn't exist.
+        // We could also check if there is a fully populated example
+        // directly in the response schema examples properties.
         continue
       }
 
+      // There can be more than one example for a given content type. We need to
+      // iterate over the keys of the examples to create individual
+      // example objects
       for (const key of Object.keys(examples)) {
         const example = {
           key,
@@ -305,7 +401,10 @@ export function getResponseExamples(operation: CodeSampleOperation): ResponseExa
             contentType,
             description: examples[key].summary || response.description || '',
             example: examples[key].value,
-            // Schema data makes JSON about 4x larger, but the UI needs the example/schema toggle.
+            // Note: Including the schema significantly increases JSON file size (~4x),
+            // but it's necessary to support the schema/example toggle in the UI.
+            // Users can switch between viewing the example response and the full schema.
+            // example/examples annotation fields are stripped as they are not rendered.
             schema: stripSchemaExamples(mediaType.schema),
           },
         }
@@ -316,8 +415,17 @@ export function getResponseExamples(operation: CodeSampleOperation): ResponseExa
   return responseExamples
 }
 
-// Path parameter example values are grouped by example key, then parameter name.
-// Parameters without examples use uppercased names under default so fake route values stand out.
+/*
+  Path parameters can have more than one example key. We need to create
+  an example for each and then choose the most appropriate example when
+  we merge requests with responses.
+  Parameter examples are in the format:
+  {
+    [parameter key]: {
+      [parameter name]: value
+    }
+  }
+*/
 export function getParameterExamples(
   operation: CodeSampleOperation,
 ): Record<string, Record<string, unknown>> {
@@ -328,6 +436,9 @@ export function getParameterExamples(
   const parameterExamples: Record<string, Record<string, unknown>> = {}
   for (const parameter of parameters) {
     const examples = parameter.examples
+    // If there are no examples, create an example from the uppercase parameter
+    // name, so that it is more visible that the value is fake data
+    // in the route path.
     if (!examples) {
       if (!parameterExamples.default) parameterExamples.default = {}
       parameterExamples.default[parameter.name] = parameter.name.toUpperCase()

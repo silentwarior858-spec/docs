@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { runRule } from '../../lib/init-test'
 import { frontmatterLiquidSyntax, liquidSyntax } from '../../lib/linting-rules/liquid-syntax'
 
-// Disable frontMatter stripping so the rule can parse frontmatter itself.
+// Configure the test figure to not split frontmatter and content
 const fmOptions = { markdownlintOptions: { frontMatter: null } }
 
 describe(frontmatterLiquidSyntax.names.join(' - '), () => {
@@ -76,7 +76,7 @@ describe(liquidSyntax.names.join(' - '), () => {
       '---',
       '{% data reusables.foo.bar %}',
       '{% if true %}Permission statement{% endif %}',
-      // The liquid-ifversion-tags rule owns invalid ifversion names.
+      // Not correct, but not caught by this rule. See liquid-ifversion-tags.
       '{% ifversion ghhes %}bla{%endif%}',
     ].join('\n')
     const result = await runRule(liquidSyntax, { strings: { markdown } })

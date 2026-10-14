@@ -3,7 +3,8 @@ import Webhook from '../scripts/webhook'
 
 describe('webhook generation with oneOf fields', () => {
   test('should properly generate webhook documentation for secret_scanning_alert_location with oneOf details', async () => {
-    // Mirrors secret_scanning_alert_location's oneOf details shape in github/rest-api-description.
+    // Mock OpenAPI schema that represents the actual structure from github/rest-api-description
+    // This simulates the secret_scanning_alert_location webhook with oneOf details field
     const mockWebhookSchema = {
       summary:
         'This event occurs when there is activity relating to the locations of a secret in a secret scanning alert.',
@@ -266,28 +267,34 @@ describe('webhook generation with oneOf fields', () => {
       },
     }
 
+    // Create webhook instance and process it
     const webhook = new Webhook(mockWebhookSchema)
     await webhook.process()
 
+    // Verify basic webhook properties
     expect(webhook.category).toBe('secret_scanning_alert_location')
     expect(webhook.action).toBe('created')
     expect(webhook.availability).toEqual(['repository', 'organization', 'app'])
     expect(webhook.bodyParameters).toBeDefined()
     expect(webhook.bodyParameters.length).toBeGreaterThan(0)
 
+    // Find the location parameter
     const locationParam = webhook.bodyParameters.find((param) => param.name === 'location')
     expect(locationParam).toBeDefined()
     expect(locationParam?.type).toBe('object')
     expect(locationParam?.childParamsGroups).toBeDefined()
 
+    // Find the details parameter within location
     const detailsParam = locationParam?.childParamsGroups?.find((param) => param.name === 'details')
     expect(detailsParam).toBeDefined()
     expect(detailsParam?.type).toBe('object')
 
+    // Verify that oneOf handling worked correctly
     expect(detailsParam?.oneOfObject).toBe(true)
     expect(detailsParam?.childParamsGroups).toBeDefined()
     expect(detailsParam?.childParamsGroups?.length).toBeGreaterThan(1)
 
+    // Check that all expected oneOf variants are present
     const childParams = detailsParam?.childParamsGroups || []
     const variantNames = childParams.map((param) => param.name)
 
@@ -304,11 +311,13 @@ describe('webhook generation with oneOf fields', () => {
     expect(variantNames).toContain('pull_request_review')
     expect(variantNames).toContain('pull_request_review_comment')
 
+    // Verify specific variant details
     const commitVariant = childParams.find((param) => param.name === 'commit')
     expect(commitVariant).toBeDefined()
     expect(commitVariant?.description).toContain("commit' secret scanning location type")
     expect(commitVariant?.childParamsGroups?.length).toBeGreaterThan(0)
 
+    // Check commit variant has expected properties
     const commitProperties = commitVariant?.childParamsGroups?.map((param) => param.name) || []
     expect(commitProperties).toContain('path')
     expect(commitProperties).toContain('start_line')
@@ -325,11 +334,13 @@ describe('webhook generation with oneOf fields', () => {
     expect(issueUrlParam?.name).toBe('issue_title_url')
     expect(issueUrlParam?.description).toContain('API URL to get the associated issue resource')
 
+    // Verify that descriptions are properly rendered
     expect(commitVariant?.description).toContain('<p>')
     expect(issueTitleVariant?.description).toContain('<p>')
   })
 
   test('should handle mixed oneOf types correctly', async () => {
+    // Test case where oneOf contains both objects and non-objects
     const mockMixedOneOfSchema = {
       summary: 'Test webhook with mixed oneOf types',
       description: 'A webhook for testing mixed oneOf handling',
@@ -375,6 +386,7 @@ describe('webhook generation with oneOf fields', () => {
     const mixedParam = webhook.bodyParameters.find((param) => param.name === 'mixed_field')
     expect(mixedParam).toBeDefined()
 
+    // For mixed types, it should use the fallback behavior (not oneOfObject)
     expect(mixedParam?.oneOfObject).toBeFalsy()
     expect(mixedParam?.type).toContain('string')
     expect(mixedParam?.type).toContain('object')
@@ -406,6 +418,7 @@ describe('webhook generation with oneOf fields', () => {
 
     const webhook = new Webhook(mockEmptyOneOfSchema)
 
+    // Should not throw an error
     await expect(webhook.process()).resolves.not.toThrow()
 
     const emptyParam = webhook.bodyParameters.find((param) => param.name === 'empty_oneof')

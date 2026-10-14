@@ -1,27 +1,39 @@
 #!/usr/bin/env sh
 
-# The production Dockerfile copies only required files, but these scripts still run from the
-# docs-internal root.
+#
+# This script is intended to be called from the production Dockerfile
+# Though it isn't working with all of the files from docs-internal (it only COPYs what is needed),
+# it is useful to think of these scripts running from the root of the docs-internal repo.
+#
 
+# Fetches and resolves docs-internal, early-access, and translations repos
 echo "Fetching and resolving early-access, and translations repos"
 
+# Exit immediately if a command exits with a non-zero status
 set -e
 
+# Import the clone_or_use_cached_repo function
 . ./build-scripts/clone-or-use-cached-repo.sh
 
-# Docker build mounts DOCS_BOT_PAT_BASE at /run/secrets/DOCS_BOT_PAT_BASE.
+# Set the GITHUB_TOKEN environment variable from the mounted --secret passed to Docker build
 GITHUB_TOKEN=$(cat /run/secrets/DOCS_BOT_PAT_BASE)
 
+# - - - - - - - - - -
+# Early access
+# - - - - - - - - - -
 echo "Fetching early access..."
 clone_or_use_cached_repo "docs-early-access" "docs-early-access" "main"
 echo "Merging early access..."
 . ./build-scripts/merge-early-access.sh
 
-# Clone translations under the Dockerfile WORKDIR, the docs-internal root.
+# - - - - - - - - - -
+# Clone the translations repos
+# - - - - - - - - - -
+# Make sure to clone each translation repo into the `translations` directory inside the root of docs-internal (the Dockerfile's WORKDIR)
 mkdir -p translations
 cd translations
 
-# Disable exit-on-error so the script can collect every background clone failure.
+# Temporarily turn off exit-on-error so we can collect all PIDs
 set +e
 
 pids=""
@@ -35,6 +47,7 @@ for pid in $pids; do
   wait "$pid" || failures=$((failures+1))
 done
 
+# Restore strict mode
 set -e
 
 if [ "$failures" -gt 0 ]; then
@@ -44,12 +57,11 @@ else
   echo "✅  All translations fetched."
 fi
 
-# The Dockerfile copies translations/ into the image, and each .git/config keeps
-# the token-bearing clone URL. Nothing reads translation git metadata at runtime.
-rm -rf ./*/.git
-
-# Return to the docs-internal root after cloning translations.
+# Go back to the root of the docs-internal repo
 cd ..
 
-# Remove the token from the shell environment.
+# - - - - - - - - - -
+# Cleanup
+# - - - - - - - - - -
+# Delete GITHUB_TOKEN from the environment
 unset GITHUB_TOKEN

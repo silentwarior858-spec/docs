@@ -23,7 +23,7 @@ children:
   - /multi-repository-variant-analysis
   - /codeql
   - /tool-status-page
-  - /code-scanning-on-pull-requests
+  - /pull-request-alert-metrics
   - /repository-properties
 ---
 

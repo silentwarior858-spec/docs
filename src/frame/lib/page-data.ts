@@ -20,11 +20,14 @@ interface FileSystemError extends Error {
   code?: string
 }
 
-// DEBUG_TRANSLATION_FALLBACKS logs each translation file that falls back to English.
+// If you run `export DEBUG_TRANSLATION_FALLBACKS=true` in your terminal,
+// every time a translation file fails to initialize we fall back to English
+// and write a warning to stdout.
 const DEBUG_TRANSLATION_FALLBACKS = Boolean(
   JSON.parse(process.env.DEBUG_TRANSLATION_FALLBACKS || 'false'),
 )
-// THROW_TRANSLATION_ERRORS throws on missing files, corrupt files, and translatable-key fallbacks.
+// If you don't want to fall back to English automatically on corrupt
+// translation files, set `export THROW_TRANSLATION_ERRORS=true`
 const THROW_TRANSLATION_ERRORS = Boolean(
   JSON.parse(process.env.THROW_TRANSLATION_ERRORS || 'false'),
 )
@@ -39,13 +42,17 @@ class FrontmatterParsingError extends Error {
   }
 }
 
-// product stays translatable because product frontmatter can contain prose.
+// Note! As of Nov 2022, the schema says that 'product' is translatable
+// which is surprising since only a single page has prose in it.
 const translatableFrontmatterKeys = Object.entries(frontmatterSchema.schema.properties)
   .filter(([, value]: [string, { translatable?: boolean }]) => value.translatable)
   .map(([key]) => key)
 
-// Initialize pages once per language because pages do not change per version.
-// The unversioned tree is the expensive base for siteTree and pageList.
+/**
+ * We only need to initialize pages _once per language_ since pages don't change per version. So we do that
+ * first since it's the most expensive work. This gets us a nested object with pages attached that we can use
+ * as the basis for the siteTree after we do some versioning. We can also use it to derive the pageList.
+ */
 export async function loadUnversionedTree(
   languagesOnly: string[] = [],
 ): Promise<UnversionLanguageTree> {
@@ -84,8 +91,11 @@ export async function loadUnversionedTree(
   return unversionedTree
 }
 
-// Category pages inherit applicable versions from immediate children.
 function setCategoryApplicableVersions(tree: UnversionedTree): void {
+  // Now that the tree has been fully computed, we can for any node that
+  // is a category page, re-set its `.applicableVersions` and `.permalinks`
+  // based on the union set of all its immediate children's
+  // `.applicableVersions`.
   for (const childPage of tree.childPages) {
     if (childPage.page.relativePath.endsWith('index.md')) {
       const combinedApplicableVersions: string[] = []
@@ -100,7 +110,9 @@ function setCategoryApplicableVersions(tree: UnversionedTree): void {
         moreThanOneChild = true
       }
       if (
-        // Landing pages with no children keep their original applicable versions.
+        // Some landing pages have no children at all.
+        // For example the search/index.md page. With no children,
+        // the combined applicableVersions would be [].
         moreThanOneChild &&
         !equalSets(
           new Set(childPage.page.applicableVersions),
@@ -141,37 +153,70 @@ async function translateTree(
   let data
   let content
   try {
-    // Known-broken translations for code-security/concepts fall back to English.
+    // HACK: Skip known-broken translation files and fall back to English.
+    // Remove once the translation repos have been fixed.
     if (fullPath.includes('translations/') && relativePath === 'code-security/concepts/index.md') {
       throw new FrontmatterParsingError('Skipping known-broken translation file')
     }
 
     const read = await readFileContents(fullPath)
+    // If it worked, great!
     content = read.content
     data = read.data as Record<string, unknown>
 
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      // Errors-only frontmatter and fullwidth-colon scalars both need whole-file English fallback.
+      // If the file's frontmatter Yaml is entirely broken,
+      // the result of `readFileContents()` is that you just
+      // get a `errors` key. E.g.
+      //
+      //   errors: [
+      //     {
+      //       reason: 'invalid frontmatter entry',
+      //       message: 'YML parsing error!',
+      //       filepath: 'translations/ja-JP/content/get-started/index.md'
+      //     }
+      //   ]
+      //
+      // A translated file can also be corrupted so that the frontmatter
+      // parses to a non-object. For example, if machine translation replaces
+      // the ASCII `:` key/value separators with fullwidth colons (`：`), YAML
+      // parses the whole block as a single scalar string. `data` is then a
+      // string rather than an object, so none of the frontmatter keys (like
+      // `title`) exist and the per-key English fallback below never fires,
+      // leaving the page with an empty title. Treat that the same as entirely
+      // broken frontmatter and fall back to English.
+      //
+      // If this the case throw error so we can lump this error with
+      // how we deal with the file not even being present on disk.
       throw new FrontmatterParsingError(JSON.stringify(read.errors), true)
     }
 
     for (const { property } of read.errors) {
-      // Translatable key errors fall back to English; untranslated key errors do not.
+      // If any of the errors happened on keys that are considered
+      // translatable, we can't accept that and have to fall back to
+      // English.
+      // For example, if a Japanese page's frontmatter lacks `title`,
+      // (which triggers a 'is required' error) you can't include it
+      // because you'd have a Page with `{title: undefined}`.
+      // The beauty in this is that if the translated content file
+      // has something wrong with, say, the `versions` frontmatter key
+      // we don't even care because we won't be using it anyway.
       if (property && translatableFrontmatterKeys.includes(property)) {
         const message = `frontmatter error on '${property}' (in ${fullPath}) so falling back to English`
         if (DEBUG_TRANSLATION_FALLBACKS) {
-          // Object context lets the health report attribute the fallback to this path.
+          // The object format is so the health report knows which path the issue is on
           logger.warn(message, { path: relativePath })
         }
         if (THROW_TRANSLATION_ERRORS) {
           throw new Error(message)
         }
-        // Dynamic property names need a string-indexed record.
+        // Cast to a string-indexed record because the property is dynamic
         ;(data as Record<string, unknown>)[property] = (enData as Record<string, unknown>)[property]
       }
     }
   } catch (error) {
-    // Missing or corrupt translations use the English page data and content.
+    // If it didn't work because it didn't exist, don't fret,
+    // we'll use the English equivalent's data and content.
     if ((error as FileSystemError).code === 'ENOENT' || error instanceof FrontmatterParsingError) {
       data = enData
       content = enPage.markdown
@@ -180,10 +225,11 @@ async function translateTree(
           ? `Unable to parse YAML frontmatter in ${fullPath}, falling back to English. Details: ${error.message}`
           : `Unable to initialize ${fullPath} because translation content file does not exist.`
       if (error instanceof FrontmatterParsingError && error.isYmlError) {
-        // YAML parse failures always warn, then either serve English or throw.
+        // YAML parse failures are always logged — they indicate a translation file is corrupt
+        // and will silently serve English until the translation repo is fixed.
         logger.warn(message, { path: relativePath })
       } else if (DEBUG_TRANSLATION_FALLBACKS) {
-        // Expected high-volume missing translations log only when opted in.
+        // Missing translation files are expected and high-volume; only log when opted in.
         logger.warn(message, { path: relativePath })
       }
       if (THROW_TRANSLATION_ERRORS) {
@@ -200,7 +246,7 @@ async function translateTree(
     }),
   )
 
-  // Content needs the same translation correction as frontmatter prose.
+  // The "content" isn't a frontmatter key
   translatedData.markdown = correctTranslatedContentStrings(content || '', enPage.markdown, {
     relativePath,
     code: langObj.code,
@@ -235,24 +281,25 @@ async function translateTree(
     )
   }
 
-  // Page construction merges dynamic frontmatter fields with translated fields.
+  // Cast through unknown to handle the complex object merging for Page constructor
   ;(item as UnversionedTree).page = new Page(
     Object.assign(
       {},
-      // English fields supply defaults for untranslated frontmatter.
+      // By default, shallow-copy everything from the English equivalent.
       enData,
-      // Core properties must point to the translated file.
+      // Overlay with the translations core properties.
       {
         basePath,
         relativePath,
         languageCode: langObj.code,
         fullPath,
       },
-      // Translated properties replace their English defaults.
+      // And the translations translated properties.
       translatedData,
     ) as unknown as ConstructorParameters<typeof Page>[0],
   ) as unknown as UnversionedTree['page']
 
+  // Preserve the crossProductChild flag from the English tree
   if (enTree.crossProductChild) {
     ;(item as UnversionedTree).crossProductChild = true
   }
@@ -264,7 +311,7 @@ async function translateTree(
     ;(item as UnversionedTree).childPages = await Promise.all(
       enTree.childPages
         .filter((childTree: UnversionedTree) => {
-          // Translations exclude early access pages.
+          // Translations should not get early access pages at all.
           return childTree.page.relativePath.split(path.sep)[0] !== 'early-access'
         })
         .map((childTree: UnversionedTree) => translateTree(dir, langObj, childTree)),
@@ -274,8 +321,18 @@ async function translateTree(
   return item as UnversionedTree
 }
 
-// Navigation needs child page order preserved while each language and version gets its own tree.
-// Versioned trees add the version permalink and drop child pages unavailable in that version.
+/**
+ * The siteTree is a nested object with pages for every language and version, useful for nav because it
+ * contains parent, child, and sibling relationships:
+ *
+ * siteTree[languageCode][version].childPages[<array of pages>].childPages[<array of pages>] (etc...)
+
+* Given an unversioned tree of all pages per language, we can walk it for each version and do a couple operations:
+ * 1. Add a versioned href to every item, where the href is the relevant permalink for the current version.
+ * 2. Drop any child pages that are not available in the current version.
+ *
+ * Order of languages and versions doesn't matter, but order of child page arrays DOES matter (for navigation).
+*/
 export async function loadSiteTree(
   unversionedTree?: UnversionLanguageTree,
   languagesOnly: string[] = [],
@@ -284,14 +341,17 @@ export async function loadSiteTree(
   const siteTree: SiteTree = {}
 
   const langCodes = (languagesOnly.length && languagesOnly) || Object.keys(languages)
+  // For every language...
   await Promise.all(
     langCodes.map(async (langCode) => {
       if (!(langCode in rawTree)) {
         throw new Error(`No tree for language ${langCode}`)
       }
       const treePerVersion: { [version: string]: Tree } = {}
+      // in every version...
       await Promise.all(
         versions.map(async (version) => {
+          // "version" the pages.
           treePerVersion[version] = await versionPages(
             Object.assign({}, rawTree[langCode]),
             version,
@@ -313,7 +373,7 @@ export async function versionPages(
   langCode: string,
 ): Promise<Tree> {
   const tree = obj as unknown as Tree
-  // Layouts read the versioned href directly from each tree node.
+  // Add a versioned href as a convenience for use in layouts.
   const permalink = tree.page.permalinks.find(
     (pl) =>
       pl.pageVersion === version ||
@@ -329,7 +389,9 @@ export async function versionPages(
   if (!tree.childPages) return tree
   const versionedChildPages = await Promise.all(
     tree.childPages
+      // Drop child pages that do not apply to the current version
       .filter((childPage) => childPage.page.applicableVersions.includes(version))
+      // Version the child pages recursively.
       .map((childPage) =>
         versionPages(Object.assign({}, childPage) as unknown as UnversionedTree, version, langCode),
       ),
@@ -340,7 +402,7 @@ export async function versionPages(
   return tree
 }
 
-// Page list consumers need a flat collection across languages.
+// Derive a flat array of Page objects in all languages.
 export async function loadPageList(
   unversionedTree?: UnversionLanguageTree,
   languagesOnly: string[] = [],
@@ -368,7 +430,11 @@ export async function loadPageList(
     if (!item.childPages) return
     await Promise.all(
       item.childPages
-        // Cross-product children already exist at their original path, so duplicates violate search-index uniqueness.
+        // Cross-product children are pages included from other parts of the
+        // tree via absolute `/content/` paths in a bespoke landing page's
+        // children list.  They already exist in their original location, so
+        // including them again would create duplicate entries in the flat
+        // page list which breaks search-index uniqueness constraints.
         .filter((childPage: UnversionedTree) => !childPage.crossProductChild)
         .map(async (childPage: UnversionedTree) => await addToCollection(childPage, collection)),
     )
@@ -379,7 +445,7 @@ export async function loadPageList(
 
 export const loadPages = loadPageList
 
-// Permalink keys make page lookup constant time.
+// Create an object from the list of all pages with permalinks as keys for fast lookup.
 export function createMapFromArray(pageList: Page[]): Record<string, Page> {
   const pageMap = pageList.reduce(
     (accumulatedMap: Record<string, Page>, page: Page) => {

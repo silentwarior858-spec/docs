@@ -3,6 +3,7 @@ import type { RuleParams, RuleErrorCallback, Rule } from '../../types'
 
 import { doesStringEndWithPeriod, getRange, isStringQuoted } from '../helpers/utils'
 
+// Minimal type for markdownit tokens used in this rule
 interface MarkdownToken {
   children?: MarkdownToken[]
   line?: string

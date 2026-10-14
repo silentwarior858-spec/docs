@@ -39,13 +39,13 @@ describe('generatePromptId', () => {
   })
 
   test('generates deterministic IDs (regression test)', () => {
-    // Fixed hash outputs catch unintended murmurhash changes.
+    // These specific values ensure the hash function remains consistent
     expect(generatePromptId('hello world')).toBe('1730621824')
     expect(generatePromptId('test')).toBe('4180565944')
   })
 
   test('handles prompts with code context (ref pattern)', () => {
-    // ref= prompts include referenced code, a newline, then prompt text.
+    // When ref= is used, the prompt includes referenced code + prompt text separated by newline
     const codeContext =
       'function logPersonAge(name, age, revealAge) {\n  if (revealAge) {\n    console.log(name);\n  }\n}'
     const promptText = 'Improve the variable names in this function'
@@ -55,19 +55,20 @@ describe('generatePromptId', () => {
     expect(typeof id).toBe('string')
     expect(id.length).toBeGreaterThan(0)
 
+    // Should be different from just the prompt text alone
     expect(id).not.toBe(generatePromptId(promptText))
   })
 
   test('handles very long prompts', () => {
-    // Real prompts can include code blocks longer than 100 lines.
-    const longCode = 'x\n'.repeat(500)
+    // Real-world prompts can include entire code blocks (100+ lines)
+    const longCode = 'x\n'.repeat(500) // 500 lines
     const id = generatePromptId(longCode)
     expect(typeof id).toBe('string')
     expect(id.length).toBeGreaterThan(0)
   })
 
   test('handles prompts with backticks and template literals', () => {
-    // Prompts can include inline code delimiters.
+    // Prompts often include inline code with backticks
     const prompt = "In JavaScript I'd write: `The ${numCats === 1 ? 'cat is' : 'cats are'} hungry.`"
     const id = generatePromptId(prompt)
     expect(typeof id).toBe('string')
@@ -75,7 +76,7 @@ describe('generatePromptId', () => {
   })
 
   test('handles prompts with placeholders', () => {
-    // Content uses placeholders like NEW-LANGUAGE and OWNER/REPOSITORY.
+    // Content uses placeholders like NEW-LANGUAGE, OWNER/REPOSITORY
     const id1 = generatePromptId('What is NEW-LANGUAGE best suited for?')
     const id2 = generatePromptId('In OWNER/REPOSITORY, create a feature request')
     expect(id1).not.toBe(id2)
@@ -84,7 +85,7 @@ describe('generatePromptId', () => {
   })
 
   test('handles unicode and international characters', () => {
-    // Prompts can include non-ASCII text.
+    // May encounter non-ASCII characters in prompts
     const id1 = generatePromptId('Explique-moi le code en français')
     const id2 = generatePromptId('コードを説明してください')
     const id3 = generatePromptId('Объясните этот код')

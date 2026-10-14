@@ -1,5 +1,5 @@
-// THROW_ON_EMPTY is false for 0 or false and true for 1 or true.
-// Without it, CI and non-production throw.
+// If 'THROW_ON_EMPTY' is set and it's value is '0' or 'false' it becomes
+// false. Or true if it's 'true' or '1'.
 export const THROW_ON_EMPTY: boolean = Boolean(
   process.env.THROW_ON_EMPTY
     ? JSON.parse(process.env.THROW_ON_EMPTY)

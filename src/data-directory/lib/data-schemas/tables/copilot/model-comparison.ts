@@ -1,3 +1,5 @@
+// This schema enforces the structure in model-comparison.yml
+
 const modelComparisonSchema = {
   type: 'object',
   additionalProperties: false,

@@ -9,8 +9,11 @@ import { colorModeScript } from '@/color-schemes/lib/color-mode-script'
 
 const isDev = process.env.NODE_ENV === 'development'
 
-// The pre-paint theme script from _document.tsx is inline, so CSP needs a script-src hash.
-// A nonce would vary per response and break shared CDN caching.
+// The pre-paint theme script in `_document.tsx` is inlined, so it needs an
+// explicit CSP `script-src` allowance. We hash the exact script string rather
+// than using a nonce, because a nonce would have to vary per response and would
+// break the shared CDN cache. The script is identical for every request, so its
+// hash is stable and the HTML stays cacheable.
 const colorModeScriptHash = `'sha256-${createHash('sha256').update(colorModeScript).digest('base64')}'`
 const GITHUB_DOMAINS = [
   "'self'",
@@ -26,19 +29,22 @@ const DEFAULT_OPTIONS = {
   referrerPolicy: {
     policy: 'no-referrer-when-downgrade' as const,
   },
-  // The default CSP blocks untrusted origins and limits inline scripts to approved hashes.
+  // This module defines a Content Security Policy (CSP) to disallow
+  // inline scripts and content from untrusted sources.
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'none'"],
       prefetchSrc: ["'self'"],
-      // Safari local development needs ws: for Next.js hot module reloading.
+      // When doing local dev, especially in Safari, you need to add `ws:`
+      // which NextJS uses for the hot module reloading.
       connectSrc: ["'self'", 'https://collector.githubapp.com', isDev && 'ws:'].filter(
         Boolean,
       ) as string[],
       fontSrc: ["'self'", 'data:'],
       imgSrc: [...GITHUB_DOMAINS, 'data:', 'placehold.it'],
       objectSrc: ["'self'"],
-      // Development webpack eval devtool needs unsafe-eval.
+      // For use during development only!
+      // `unsafe-eval` allows us to use a performant webpack devtool setting (eval)
       // https://webpack.js.org/configuration/devtool/#devtool
       scriptSrc: [
         ...GITHUB_DOMAINS,
@@ -51,17 +57,15 @@ const DEFAULT_OPTIONS = {
       frameSrc: [
         ...GITHUB_DOMAINS,
         isDev && 'http://localhost:3000',
-        // src/frame/components/context/ArticleContext.tsx sets this URL too.
-        // A shared constant could capture SUPPORT_PORTAL_URL before it is set.
+        // This URL is also set in ArticleContext.tsx. We don't rely on importing a constant as we may run into an import conflict where the env variable is not yet set.
         process.env.NODE_ENV === 'production'
           ? 'https://support.github.com'
-          : // Missing SUPPORT_PORTAL_URL means local development is not testing the VA iframe.
+          : // Assume that a developer is not testing the VA iframe locally if this env var is not set
             process.env.SUPPORT_PORTAL_URL || '',
       ].filter(Boolean) as string[],
       frameAncestors: isDev ? ['*'] : [...GITHUB_DOMAINS],
       styleSrc: [...GITHUB_DOMAINS, "'self'", "'unsafe-inline'", 'data:'],
-      // Deprecated GitHub Enterprise search still needs child-src.
-      childSrc: ["'self'"],
+      childSrc: ["'self'"], // exception for search in deprecated GHE versions
       manifestSrc: ["'self'"],
       upgradeInsecureRequests: isDev ? null : [],
     },
@@ -95,21 +99,23 @@ const staticDeprecatedHelmet = helmet(STATIC_DEPRECATED_OPTIONS)
 const developerDeprecatedHelmet = helmet(DEVELOPER_DEPRECATED_OPTIONS)
 
 export default function helmetMiddleware(req: Request, res: Response, next: NextFunction) {
+  // Enable CORS
   if (['GET', 'OPTIONS'].includes(req.method)) {
     res.set('access-control-allow-origin', '*')
   }
 
+  // Determine version for exceptions
   const { requestedVersion } = isArchivedVersion(req)
 
+  // Check if this is a legacy developer.github.com path
   const isDeveloper = req.path
     .replace(languagePrefixPathRegex, '/')
     .startsWith(`/enterprise/${requestedVersion}/developer`)
   if (versionSatisfiesRange(requestedVersion, '<=2.18') && isDeveloper) {
-    // Deprecated developer.github.com paths need Google font and inline script exceptions.
     return developerDeprecatedHelmet(req, res, next)
   }
 
-  // Node.js-era deprecated Enterprise docs need relaxed CSP directives.
+  // Exception for deprecated Enterprise docs (Node.js era)
   if (
     versionSatisfiesRange(requestedVersion, '<=2.19') &&
     versionSatisfiesRange(requestedVersion, '>2.12')
@@ -117,7 +123,7 @@ export default function helmetMiddleware(req: Request, res: Response, next: Next
     return nodeDeprecatedHelmet(req, res, next)
   }
 
-  // Static-site-era Enterprise search needs inline scripts.
+  // Exception for search in deprecated Enterprise docs <=2.12 (static site era)
   if (versionSatisfiesRange(requestedVersion, '<=2.12')) {
     return staticDeprecatedHelmet(req, res, next)
   }

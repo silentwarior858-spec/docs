@@ -21,7 +21,9 @@ const logger = createLogger(import.meta.url)
 
 const isProd = process.env.NODE_ENV === 'production'
 
-// CI or a true LOG_ERROR_ANNOTATIONS value enables annotations.
+// This way, if you *set* the `LOG_ERROR_ANNOTATIONS` env var, whatever its
+// value is, it determines it. But if it's not set, the default is to look
+// for a truty value in `process.env.CI`.
 const CI = Boolean(JSON.parse(process.env.CI || 'false'))
 const LOG_ERROR_ANNOTATIONS =
   CI || Boolean(JSON.parse(process.env.LOG_ERROR_ANNOTATIONS || 'false'))
@@ -32,17 +34,19 @@ const externalRedirects = readJsonFile('./src/redirects/lib/external-sites.json'
   string
 >
 
-// Log each file, line, and message once because one CI run can hit the same error repeatedly.
+// The reason we "memoize" which lines we've logged is because the same
+// error might happen more than once in the whole space of one CI run.
 const _logged = new Set<string>()
 
-// GitHub Actions turns this stdout command format into a PR inline annotation.
+// Printing this to stdout in this format, will automatically be picked up
+// by Actions to turn that into a PR inline annotation.
 function logError(file: string, line: number, message: string, title = 'Error') {
   if (LOG_ERROR_ANNOTATIONS) {
     const hash = `${file}:${line}:${message}`
     if (_logged.has(hash)) return
     _logged.add(hash)
     message = stripAnsi(
-      // Escape like Actions core: https://github.com/actions/toolkit/blob/main/packages/core/src/command.ts
+      // copied from: https://github.com/actions/toolkit/blob/main/packages/core/src/command.ts
       message.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A'),
     )
     const error = `::error file=${file},line=${line},title=${title}::${message}`
@@ -51,10 +55,12 @@ function logError(file: string, line: number, message: string, title = 'Error') 
   }
 }
 
-// AUTOTITLE matching tolerates writer-added spaces around the marker.
+// Meaning it can be 'AUTOTITLE ' or ' AUTOTITLE' or 'AUTOTITLE'
 const AUTOTITLE = /^\s*AUTOTITLE\s*$/
 
-// Translations treat this Liquid-style error as a signal to fall back to English.
+// This is exported because in translations, we need to treat this as
+// one of those Liquid parsing errors which happens on corrupted translations
+// which we use to know that we need to fall back to English.
 export class TitleFromAutotitleError extends Error {}
 
 interface LinkNode extends Link {
@@ -68,17 +74,27 @@ interface NodeToProcess {
   originalHref?: string
 }
 
-// Rewrite root-relative links to the current language and page version during rendering.
-// Resolve refs before rewrites: https://github.github.com/gfm/#link-reference-definitions
-// [Some link][some-reference] plus [some-reference]: /abc/123
-// resolves to [Some link](/abc/123).
+// Content authors write links like `/some/article/path`, but they need to be
+// rewritten on the fly to match the current language and page version
 export default function rewriteLocalLinks(context?: Context) {
   return async function (tree: Node): Promise<void> {
     if (!context) return
     const { currentLanguage, autotitleLanguage, currentVersion } = context
+    // There's no languageCode or version passed, so nothing to do
     if (!currentLanguage || !currentVersion) return
     const nodes: NodeToProcess[] = []
 
+    // For links using linkReference and definition, we must
+    // first get the list of definitions and later resolve
+    // the linkReferences.
+    //
+    // So, for example, a reference that looks like:
+    //    [Some link](some-reference)
+    //    [some-reference]: /abc/123
+    // Becomes:
+    //    [Some link](/abc/123)
+    // And then we can treat it like a regular 'link';
+    // see https://github.github.com/gfm/#link-reference-definitions for spec
     const definitions = new Map<string, Definition>()
     visit(tree, 'definition', (node: Node) => {
       const defNode = node as Definition
@@ -89,7 +105,9 @@ export default function rewriteLocalLinks(context?: Context) {
       const linkRefNode = node as LinkReference
       const definition = definitions.get(linkRefNode.identifier)
       if (definition) {
-        // Mutate LinkReference into Link because TypeScript sees incompatible mdast shapes.
+        // Replace the LinkReference node with a Link node by mutating its
+        // properties at runtime. Using 'as unknown as' because LinkReference
+        // and Link are structurally incompatible in TypeScript.
         const mutableNode = linkRefNode as unknown as Link
         mutableNode.type = 'link'
         mutableNode.url = definition.url
@@ -99,6 +117,7 @@ export default function rewriteLocalLinks(context?: Context) {
       }
     })
 
+    // this function handles processing the tree recursively, sometimes we have additional trees to convert
     await processTree(tree, autotitleLanguage || currentLanguage, currentVersion, nodes, context)
   }
 }
@@ -110,6 +129,7 @@ async function processTree(
   nodes: NodeToProcess[],
   context: Context,
 ) {
+  // internal links begin with `/something`
   visit(tree, 'link', (node: Node) => {
     const linkNode = node as Link
     if (linkNode.url && linkNode.url.startsWith('/')) {
@@ -118,6 +138,7 @@ async function processTree(
   })
 
   if (!isProd) {
+    // handles anchor links
     visit(tree, 'link', (node: Node) => {
       const linkNode = node as Link
       if (linkNode.url && linkNode.url.startsWith('#')) {
@@ -137,7 +158,8 @@ async function processTree(
     })
   }
 
-  // Resolve queued AUTOTITLE text after all links have their final URLs.
+  // nodes[] contains all the link nodes that need new titles
+  // and now we call to get those titles
   await Promise.all(
     nodes.map(({ url, child, originalHref }: NodeToProcess) =>
       getNewTitleSetter(child, url, context, originalHref),
@@ -162,10 +184,12 @@ function processLinkNode(node: Link, language: string, version: string, nodes: N
           originalHref: linkNode._originalHref,
         })
       } else if (
-        // Non-production English renders reject near-miss AUTOTITLE markers before they ship.
+        // This means CI and local dev
         process.env.NODE_ENV !== 'production' &&
+        // But only raise this (in CI or local dev) if it's English
         language === 'en'
       ) {
+        // Throw if the link text *almost*  is AUTOTITLE
         const childText = child as Text
         if (
           childText.value.toUpperCase() === 'AUTOTITLE' ||
@@ -193,7 +217,8 @@ async function getNewTitleSetter(
 async function getNewTitle(href: string, context: Context, child: Text, originalHref?: string) {
   const page = findPage(href, context.pages, context.redirects) as Page | undefined
   if (!page) {
-    // The parser keeps source coordinates from the original file, including frontmatter.
+    // The child.position.start.line is 1-based and already represents the line number
+    // in the original file (including frontmatter), so no offset adjustment is needed
     const line = child.position?.start.line || 1
 
     const linkText = originalHref || href
@@ -204,53 +229,74 @@ async function getNewTitle(href: string, context: Context, child: Text, original
   return await page.renderProp('title', context, { textOnly: true })
 }
 
-// Known plan paths such as /enterprise-server@2.20/rest/... only gain a language prefix,
-// except enterprise-server@latest, which normalizes below.
-// Deprecated paths such as /enterprise/11.10.340/admin/articles/... also only gain a prefix.
 function getNewHref(node: LinkNode, languageCode: string, version: string): string | undefined {
   const { url } = node
+  // Exceptions to link rewriting
   if (url.startsWith('/assets')) return
   if (url.startsWith('/public')) return
   if (url in externalRedirects) return
 
   let newHref = url
+  // If the link has a hardcoded plan or version in it, do not update other than adding a language code
+  // Examples:
+  // /enterprise-server@2.20/rest/reference/oauth-authorizations
+  // /enterprise-server/rest/reference/oauth-authorizations (this redirects to the latest version)
+  // /enterprise-server@latest/rest/reference/oauth-authorizations (this redirects to the latest version)
   const firstLinkSegment = url.split('/')[1]
   if (supportedPlans.has(firstLinkSegment.split('@')[0])) {
     newHref = path.posix.join('/', languageCode, url)
   } else if (firstLinkSegment.includes('@')) {
-    // An unknown plan segment containing @ usually means the author mistyped a versioned plan.
+    // This could mean a bad typo!
+    // This can happen if you have something
+    // like `/enterprise-servr@3.9/foo/bar` which is a typo. I.e.
+    // `enterprise-servr` is not a valid plan, but it has a `@` character  in it.
     logger.warn(
       'First segment of internal link has @ character but plan is not recognized, likely a typo',
       { url },
     )
   }
 
+  // If the link includes a deprecated version, do not update other than adding a language code
+  // Example: /enterprise/11.10.340/admin/articles/upgrading-to-the-latest-release
   const oldEnterpriseVersionNumber = url.match(patterns.getEnterpriseVersionNumber)
   if (oldEnterpriseVersionNumber && deprecated.includes(oldEnterpriseVersionNumber[1])) {
     newHref = path.posix.join('/', languageCode, url)
   }
 
-  // Enterprise Server replaces latest with a release number to avoid redirects and archive drift.
+  // Treat the unicorn where we have version numbers.
+  // As of Jan 2022, the only plan that uses version numbers is
+  // 'enterprise-server'. But some day there might more and when that day
+  // comes this line needs to account for all those where "latest" needs
+  // to be replaced by its actual latest version number.
+  // The reason for doing this rewrite is that we want to suppress the
+  // use of '...@latest' because it's just going to redirect when viewed
+  // anyway. And if a page is archived, all "latest" is replaced to the
+  // current number anyway.
   newHref = newHref.replace('/enterprise-server@latest/', `/enterprise-server@${latest}/`)
 
   if (newHref === url) {
-    // Strip any language prefix because lib/liquid-tags/link.ts adds language codes for TOC pages.
+    // start clean with no language (TOC pages already include the lang codes via lib/liquid-tags/link.ts)
     const hrefWithoutLang = getPathWithoutLanguage(url)
 
+    // normalize any legacy links so they conform to new link structure
     newHref = path.posix.join('/', languageCode, getNewVersionedPath(hrefWithoutLang))
 
+    // get the current version from the link
     const versionFromHref = getVersionStringFromPath(newHref)
 
-    // Desktop links always target dotcom.
+    // ------ BEGIN ONE-OFF OVERRIDES ------//
+    // desktop links always point to dotcom
     if (patterns.desktop.test(hrefWithoutLang)) {
       version = nonEnterpriseDefaultVersion
     }
 
-    // Admin links on dotcom always target Enterprise Cloud.
+    // admin links on dotcom always point to Enterprise Cloud
     if (patterns.adminProduct.test(hrefWithoutLang) && version === nonEnterpriseDefaultVersion) {
       version = 'enterprise-cloud@latest'
     }
+    // ------ END ONE-OFF OVERRIDES ------//
 
+    // update the version in the link
     newHref = newHref.replace(versionFromHref, version)
   }
   newHref = removeFPTFromPath(newHref)

@@ -5,8 +5,8 @@ title: "[Bug]: "
 labels: ["bug", "triage"]
 projects: ["octo-org/1", "octo-org/44"]
 assignees:
-  - octocat
-type: bug
+  - octocat{% ifversion issue-types %}
+type: bug{% endif %}
 body:
   - type: markdown
     attributes:

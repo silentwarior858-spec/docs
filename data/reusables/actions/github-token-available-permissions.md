@@ -7,8 +7,7 @@ permissions:
   attestations: read|write|none{% endif %}
   checks: read|write|none{% ifversion code-quality %}
   code-quality: read|write|none{% endif %}
-  contents: read|write|none{% ifversion copilot %}
-  copilot-requests: write|none{% endif %}
+  contents: read|write|none
   deployments: read|write|none{% ifversion fpt or ghec %}
   id-token: write|none{% endif %}
   issues: read|write|none

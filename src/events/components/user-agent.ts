@@ -1,4 +1,6 @@
-// Order matters because earlier regexes win.
+// A tiny user agent checking RegExp for analytics purposes
+
+// The order matters with these
 const OS_REGEXPS = [
   /(iphone os|ipad os) ([^);]+)/i,
   /(mac) os x ([^);]+)/i,
@@ -8,10 +10,10 @@ const OS_REGEXPS = [
   /(linux) ([^);]+)/i,
 ]
 
-// Order matters because earlier regexes win.
+// The order matters with these
 const BROWSER_REGEXPS = [
-  /(opr)\/([^\s)]+)/i, // opr identifies Opera.
-  /(edg[e]?)\/([^\s)]+)/i, // edg and edge both identify Microsoft Edge.
+  /(opr)\/([^\s)]+)/i, // Opera
+  /(edg[e]?)\/([^\s)]+)/i, // Microsoft Edge newer ua is "edg", older is "edge"
   /(firefox)\/([^\s)]+)/i,
   /(chrome)\/([^\s)]+)/i,
   /(safari)\/([^\s)]+)/i,

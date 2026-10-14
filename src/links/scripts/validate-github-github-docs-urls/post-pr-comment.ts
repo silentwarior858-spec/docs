@@ -10,13 +10,18 @@ type PostPRCommentOptions = {
   repository: string
   dryRun: boolean
   failOnError?: boolean
-  // --changed-files foo bar becomes a string array; bare --changed-files becomes true.
-  // The CHANGED_FILES default can also arrive as a space-separated string.
+  // If someone uses ` ... --changed-files`, Commander will set this to
+  // boolean `true`.
+  // If someone uses ` ... --changed-files foo bar`, the value
+  // becomes `['foo', 'bar']`.
+  // And since it defaults to an env var called `CHANGED_FILES`,
+  // it could be a string like `'foo bar'`.
   changedFiles?: string | string[] | true
 }
 
-// postPRComment may exit without posting when filtered checks are clean.
+// This function is designed to be able to run and potentially do nothing.
 export async function postPRComment(filePath: string, options: PostPRCommentOptions) {
+  // Check the options before we even begin
   if (!options.dryRun) {
     if (!options.issueNumber) {
       throw new Error(
@@ -30,13 +35,14 @@ export async function postPRComment(filePath: string, options: PostPRCommentOpti
     }
   }
 
-  // Reject bare --changed-files before reading checks.
+  // See note on `PostPRCommentOptions` type about this
   if (options.changedFiles === true) {
     throw new Error(
       'If you use --changed-files, you must provide at least one file path. For example, --changed-files foo.md bar.md',
     )
   }
 
+  // Exit early if there's absolutely nothing to "complain" about
   const checks: Check[] = JSON.parse(fs.readFileSync(filePath, 'utf8'))
 
   const changedFiles: string[] = []
@@ -66,17 +72,25 @@ export async function postPRComment(filePath: string, options: PostPRCommentOpti
     )
   }
 
-  // Missing pages can make github/github generate 404 links.
+  // Really bad. This could lead to a 404 from links in GitHub.
   const failedChecks = checksFiltered.filter((check) => !check.found)
 
-  // Missing fragments keep github/github links from reaching the intended heading.
+  // Bad. This could lead to the fragment not finding the right
+  // heading in the found page.
   const failedFragmentChecks = checksFiltered.filter(
     (check) => check.found && check.fragment && !check.fragmentFound,
   )
 
   const body: string[] = []
 
-  // Clean results update a previous failure comment but never create a new noise-only comment.
+  // Suppose, the first time the PR is created, we post a comment about
+  // some failing fragments for example. Then, the PR author addresses
+  // that and commits more to the PR. Now, perhaps there are no more failing
+  // checks. Then we're going to update the previously posted comment.
+  // But(!) suppose there were never any failing checks. Then, we don't
+  // want to bother posting a comment at all since it's just noise to
+  // say "This PR introduces no failing checks.". Especially, since this
+  // will be the case for the large majority of PRs in this repo.
   const onlyIfAlreadyPosted = failedChecks.length === 0 && failedFragmentChecks.length === 0
 
   if (onlyIfAlreadyPosted) {
@@ -141,7 +155,8 @@ export async function postPRComment(filePath: string, options: PostPRCommentOpti
   if (options.dryRun) {
     console.log(body.join('\n'))
   } else {
-    // Add the marker only when posting, so later runs can find this bot comment.
+    // We must inject this into the comment we're about to start so that it
+    // can be possible to find a previously posted comment.
     body.push(`<!-- ${needle} -->`)
 
     const issueNumber = parseInt(options.issueNumber as string, 10)
@@ -171,7 +186,7 @@ Remember, this workflow check is not required because it's not guaranteed to be 
 function contentFileMatchesURL(filePath: string, url: string) {
   if (!filePath.startsWith('content/')) return false
 
-  // Match content paths against the URL path, ignoring query strings and fragments.
+  // This strips and omits any query string or hash
   const pathname = new URL(url, 'https://docs.github.com').pathname
 
   const fileUrl = filePath.replace('content', '').replace('/index.md', '').replace(/\.md$/, '')
@@ -243,7 +258,11 @@ async function updateIssueComment(
     }
   }
 
-  // With onlyIfAlreadyPosted, clean PRs without an existing bot comment stay silent.
+  // It found no comment to *edit*, so it create *create* a new comment.
+  // But `onlyIfAlreadyPosted` is true, so it does nothing.
+  // This is convenient when might have, during the lifetime of a PR,
+  // posted a comment, then committed more changes, and then realize
+  // that what was posted previously is no long the case.
   if (onlyIfAlreadyPosted) {
     console.warn(`Deliberately not creating a new comment`)
     return

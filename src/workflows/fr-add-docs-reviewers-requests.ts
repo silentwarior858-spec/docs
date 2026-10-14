@@ -105,9 +105,14 @@ async function getAllOpenPRs() {
 }
 
 async function run() {
+  // Get info about open github/github PRs
   const prData = await getAllOpenPRs()
 
-  // Keep PRs that still need the requested docs-reviewers review.
+  // Get the PRs that are:
+  // - not draft
+  // - not a train
+  // - are requesting a review by docs-reviewers
+  // - have not already been reviewed on behalf of docs-reviewers
   const prs = prData.filter(
     (pr) =>
       !pr.isDraft &&
@@ -131,6 +136,7 @@ async function run() {
   const prAuthors = prs.map((pr) => pr.author.login)
   console.log(`PRs found: ${prIDs}`)
 
+  // Get info about the docs-content review board project
   const projectData = await graphql<ProjectQueryResponse>(
     `
       query ($organization: String!, $projectNumber: Int!) {
@@ -171,13 +177,18 @@ async function run() {
     },
   )
 
+  // Get the project ID
   const projectID = projectData.organization.projectV2.id
 
-  // The last 100 board items approximate membership; query more if fields get overwritten.
+  // Get the IDs of the last 100 items on the board.
+  // Until we have a way to check from a PR whether the PR is in a project,
+  // this is how we (roughly) avoid overwriting PRs that are already on the board.
+  // If we are overwriting items, query for more items.
   const existingItemIDs = projectData.organization.projectV2.items.nodes.map(
     (node: { id: string }) => node.id,
   )
 
+  // Get the ID of the fields that we want to populate
   const datePostedID = findFieldID('Date posted', projectData)
   const reviewDueDateID = findFieldID('Review due date', projectData)
   const statusID = findFieldID('Status', projectData)
@@ -186,14 +197,19 @@ async function run() {
   const sizeTypeID = findFieldID('Size', projectData)
   const authorID = findFieldID('Contributor', projectData)
 
+  // Get the ID of the single select values that we want to set
   const readyForReviewID = findSingleSelectID('Ready for review', 'Status', projectData)
   const hubberTypeID = findSingleSelectID('Hubber or partner', 'Contributor type', projectData)
   const docsMemberTypeID = findSingleSelectID('Docs team', 'Contributor type', projectData)
   const sizeMediumID = findSingleSelectID('M', 'Size', projectData)
 
+  // Add the PRs to the project
   const itemIDs = await addItemsToProject(prIDs, projectID)
 
-  // Existing project items reuse their IDs, so skip them before populating fields.
+  // If an item already existed on the project, the existing ID will be returned.
+  // Exclude existing items going forward.
+  // Until we have a way to check from a PR whether the PR is in a project,
+  // this is how we (roughly) avoid overwriting PRs that are already on the board
   const newItemIDs: string[] = []
   const newItemAuthors: string[] = []
   for (let index = 0; index < itemIDs.length; index++) {
@@ -209,7 +225,8 @@ async function run() {
     return
   }
 
-  // Use for...of because the body awaits.
+  // Populate fields for the new project items
+  // (Using for...of instead of forEach since the function uses await)
   for (const [index, itemID] of newItemIDs.entries()) {
     const updateProjectV2ItemMutation = generateUpdateProjectV2ItemFieldMutation({
       item: itemID,
@@ -231,7 +248,7 @@ async function run() {
       contributorTypeID,
       contributorType,
       sizeTypeID,
-      sizeType: sizeMediumID, // The board requires size, so default to M.
+      sizeType: sizeMediumID, // We need to provide something here, defaulting to 'medium' or 'M'
       featureID,
       authorID,
       headers: {

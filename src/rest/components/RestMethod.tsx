@@ -1,4 +1,4 @@
-import cx from 'clsx'
+import cx from 'classnames'
 
 import styles from './RestCodeSamples.module.scss'
 import { RenderedHTML } from '@/frame/components/ui/RenderedHTML/RenderedHTML'
@@ -9,7 +9,8 @@ type RestMethodT = {
 }
 
 export function RestMethod({ verb, requestPath }: RestMethodT) {
-  // Insert word breaks before slashes and after underscores so long paths wrap in narrow layouts.
+  // If the path is long, we want to break it up into multiple lines,
+  // breaking before the / character.
   const displayPath =
     requestPath.length > 25
       ? requestPath.replaceAll('/', '<wbr/>/').replaceAll('_', '_<wbr/>')

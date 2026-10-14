@@ -1,6 +1,4 @@
 import React from 'react'
-import cx from 'clsx'
-import styles from './ArticleTitle.module.scss'
 
 type Props = {
   children: React.ReactNode
@@ -8,7 +6,7 @@ type Props = {
 export const ArticleTitle = ({ children }: Props) => {
   return (
     <div className="d-flex flex-items-baseline flex-justify-between" data-container="title">
-      <h1 id="title-h1" className={cx('border-bottom-0', styles.title)}>
+      <h1 id="title-h1" className="border-bottom-0">
         {children}
       </h1>
     </div>

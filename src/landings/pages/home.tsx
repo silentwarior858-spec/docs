@@ -23,7 +23,8 @@ type FeaturedLink = {
 
 type Props = {
   mainContext: MainContextT
-  // getServerSideProps keeps Getting started and Popular data so the page can restore those lists.
+  // Retained in getServerSideProps so the "Getting started" / "Popular" lists
+  // can be restored later; the Docs 2026 homepage body is just the grid.
   popularLinks: Array<FeaturedLink>
   gettingStartedLinks: Array<FeaturedLink>
   productGroups: Array<ProductGroupT>

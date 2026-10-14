@@ -8,12 +8,42 @@ interface DataStructure {
   [key: string]: string | DataStructure
 }
 
-// DataDirectory builds a temporary data root for tests that need files outside the repository.
-// It writes nested data objects to disk, then destroy removes the temp root.
-// Example: new DataDirectory({ data: { reusables: { example: 'temporary text' } } }).
-// Point ROOT at dataDirectory.root during the test, then call dataDirectory.destroy().
-// Special keys match production data conventions: ui writes data/ui.yml, variables write .yml
-// files, and reusables write .md files.
+// This helper class exists so you can create a temporary root directory
+// full of data files.
+// For example, if you want to unit test with files that are not part
+// of the git repo but should only "temporarily" exist for the duration
+// of the tests.
+// This class takes an object and generates that as files on disk. E.g.
+//
+//    const dataDirectory = new DataDirectory({
+//      data: {
+//        reusables: {
+//          example: 'a rose by any other name\nwould smell as sweet',
+//        },
+//      },
+//    })
+//    process.env.ROOT = dataDirectory.root
+//    ...
+//    try {
+//        ...unit tests here...
+//    } finally {
+//      dataDirectory.destroy()
+//    }
+//
+// Note that it's very specific about keys. For example, if the nested
+// object has a key called 'ui' it doesn't create a deeper nested structure
+// but takes the nested structure and writes it to a single .yml file.
+// For example:
+//
+//    const dataDirectory = new DataDirectory({
+//      data: {
+//        ui: {
+//          key: "Value",
+//          deep: {
+//            er: "Stuff"
+//
+// will create a single <tempdir>/data/ui.yml file.
+//
 export class DataDirectory {
   root: string
 
@@ -41,7 +71,7 @@ export class DataDirectory {
           fs.writeFileSync(path.join(here, `${key}.md`), value, 'utf-8')
         } else {
           fs.mkdirSync(path.join(here, key))
-          // The reusables branch already ruled out strings.
+          // Using 'as' assertion because we know value must be an object when it's not a string in reusables context
           this.create(value as DataStructure, path.join(here, key), false, true)
         }
       } else if (isVariables) {
@@ -52,7 +82,7 @@ export class DataDirectory {
         } else {
           const there = path.join(here, key)
           fs.mkdirSync(there)
-          // Nested directory branches only handle objects.
+          // Using 'as' assertions because nested directory values are always objects, not strings
           if (key === 'reusables') {
             this.create(value as DataStructure, there, false, true)
           } else if (key === 'variables') {

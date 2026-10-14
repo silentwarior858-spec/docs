@@ -29,6 +29,7 @@ export const BespokeLanding = () => {
       <div data-search="article-body">
         <LandingHero title={title} intro={intro} heroImage={heroImage} introLinks={introLinks} />
 
+        {/* Render carousels */}
         {carousels &&
           Object.entries(carousels).map(([carouselKey, articles]) => (
             <LandingSection key={carouselKey}>

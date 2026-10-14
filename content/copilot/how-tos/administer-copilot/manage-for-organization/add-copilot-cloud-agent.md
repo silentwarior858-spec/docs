@@ -19,7 +19,7 @@ category:
 ---
 
 > [!NOTE]
-> For an introduction to {% data variables.copilot.copilot_cloud_agent %}, see [AUTOTITLE](/copilot/concepts/copilot-surfaces/copilot-on-github).
+> For an introduction to {% data variables.copilot.copilot_cloud_agent %}, see [AUTOTITLE](/copilot/concepts/agents/cloud-agent/about-cloud-agent).
 
 ## Enabling {% data variables.copilot.copilot_cloud_agent %} for your members
 

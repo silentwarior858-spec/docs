@@ -11,7 +11,10 @@ import { normalizeRenderedMarkdown } from '@/article-api/lib/normalize-markdown'
 import { allVersions } from '@/versions/lib/all-versions'
 import type { Page } from '@/types'
 
-// Article Markdown rendering needs a mocked request with page context.
+/**
+ * Creates a mocked rendering request and contextualizes it.
+ * This is used to prepare a request for rendering pages in markdown format.
+ */
 async function createContextualizedRenderingRequest(pathname: string, page: Page) {
   const mockedContext: Context = {}
   const renderingReq = {
@@ -25,41 +28,47 @@ async function createContextualizedRenderingRequest(pathname: string, page: Page
     },
   }
 
-  // Context middleware sets currentVersion for API version fallback.
+  // contextualize the request to get proper version info
   await contextualize(renderingReq as ExtendedRequestWithPageInfo, {} as Response, () => {})
   renderingReq.context.page = page
 
-  // ifversion Liquid tags read feature flags from context.
+  // Load feature flags into context (needed for {% ifversion %} tags)
   features(renderingReq as ExtendedRequestWithPageInfo, {} as Response, () => {})
 
-  // Glossary pages read rendered terms from context instead of the Markdown body.
+  // Run page-specific contextualizers (e.g., glossaries middleware)
   await glossaries(renderingReq as ExtendedRequestWithPageInfo, {} as Response, () => {})
 
-  // Data table Liquid loops read tables from context.
+  // Load data-driven table content (needed for {% for entry in tables.* %} Liquid loops)
   await dataTables(renderingReq as ExtendedRequestWithPageInfo, {} as Response, () => {})
 
   return renderingReq
 }
 
-// pathValidationMiddleware and pageValidationMiddleware fill req.pageinfo before getArticleBody.
 export async function getArticleBody(req: ExtendedRequestWithPageInfo) {
+  // req.pageinfo is set from pageValidationMiddleware and pathValidationMiddleware
+  // and is in the ExtendedRequestWithPageInfo
   const { page, pathname, archived } = req.pageinfo
 
   if (archived?.isArchived)
     throw new Error(`Page ${pathname} is archived and can't be rendered in markdown.`)
 
+  // Extract apiVersion from query params if provided
   const apiVersion = req.query.apiVersion as string | undefined
 
-  // The catch-all ArticleTransformer makes a missing transformer a registry bug.
+  // With the catch-all ArticleTransformer registered last,
+  // findTransformer always returns a transformer.
   const transformer = transformerRegistry.findTransformer(page)
   if (!transformer) throw new Error(`No transformer found for page: ${pathname}`)
 
+  // Use the transformer
   const renderingReq = await createContextualizedRenderingRequest(pathname, page)
 
-  // apiVersionValidationMiddleware rejects invalid explicit API versions before body rendering.
+  // Determine the API version to use (provided or latest)
+  // Validation is handled by apiVersionValidationMiddleware
   const currentVersion = renderingReq.context.currentVersion
   let effectiveApiVersion = apiVersion
 
+  // Use latest version if not provided
   if (!effectiveApiVersion && currentVersion && allVersions[currentVersion]) {
     effectiveApiVersion = allVersions[currentVersion].latestApiVersion || undefined
   }

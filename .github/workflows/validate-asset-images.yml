@@ -1,6 +1,8 @@
 name: Validate asset images
 
-# Rejects malformed or risky image assets before they ship.
+# **What it does**: Run ./src/assets/scripts/validate-asset-images.ts on all images in assets/
+# **Why we have it**: To protect from innocent and potentially malicious bad image assets
+# **Who does it impact**: Docs content.
 
 on:
   workflow_dispatch:

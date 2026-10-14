@@ -34,9 +34,9 @@ describe(internalLinksSlash.names.join(' - '), () => {
     const markdown = [
       'Hello [GitHub Actions](/actions/index.md)',
       '- "[Actions](/actions/index.md)"',
-      // Anchors stay outside relative page link checks.
+      // Not a relative page link
       '[Anchor on page](#anchor-on-page)',
-      // External URLs stay outside internal link checks.
+      // Not internal links
       '[External Link](https://git-scm.com/)',
       '[External link](http://example.com)',
       '[External Link](mailto:email@example.com)',

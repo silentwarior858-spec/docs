@@ -6,7 +6,7 @@ import Permalink from '@/frame/lib/permalink'
 
 import { createLogger } from '@/observability/logger/index'
 
-// Page adds rawCarousels and carousels at runtime, but the Page type omits them.
+// The Page class has rawCarousels and carousels properties that aren't on the Page type
 interface PageCarouselProps {
   rawCarousels?: Record<string, string[]>
   carousels?: Record<string, ResolvedArticle[]>
@@ -14,13 +14,18 @@ interface PageCarouselProps {
 
 const logger = createLogger('middleware:resolve-carousels')
 
+/**
+ * Build an article path by combining language, optional base path, and article path
+ */
 function buildArticlePath(currentLanguage: string, articlePath: string, basePath?: string): string {
   const pathPrefix = basePath ? `/${currentLanguage}/${basePath}` : `/${currentLanguage}`
   const separator = articlePath.startsWith('/') ? '' : '/'
   return `${pathPrefix}${separator}${articlePath}`
 }
 
-// Resolve carousel paths as content-relative, then page-relative, then retry both with .md.
+/**
+ * Try to resolve an article path using multiple resolution strategies
+ */
 function tryResolveArticlePath(
   rawPath: string,
   pageRelativePath: string | undefined,
@@ -29,10 +34,12 @@ function tryResolveArticlePath(
   const { pages, redirects } = req.context!
   const currentLanguage = req.context!.currentLanguage || 'en'
 
+  // Check if we have the required dependencies
   if (!pages || !redirects) {
     return undefined
   }
 
+  // Strategy 1: Try content-relative path (add language prefix to raw path)
   const contentRelativePath = buildArticlePath(currentLanguage, rawPath)
   let foundPage = findPage(contentRelativePath, pages, redirects)
 
@@ -40,6 +47,7 @@ function tryResolveArticlePath(
     return foundPage
   }
 
+  // Strategy 2: Try page-relative path if page context is available
   if (pageRelativePath) {
     const pageDirPath = pageRelativePath.split('/').slice(0, -1).join('/')
     const pageRelativeFullPath = buildArticlePath(currentLanguage, rawPath, pageDirPath)
@@ -50,9 +58,11 @@ function tryResolveArticlePath(
     }
   }
 
+  // Strategy 3: Try with .md extension if not already present
   if (!rawPath.endsWith('.md')) {
     const pathWithExtension = `${rawPath}.md`
 
+    // Try Strategy 1 with .md extension
     const contentRelativePathWithExt = buildArticlePath(currentLanguage, pathWithExtension)
     foundPage = findPage(contentRelativePathWithExt, pages, redirects)
 
@@ -60,6 +70,7 @@ function tryResolveArticlePath(
       return foundPage
     }
 
+    // Try Strategy 2 with .md extension
     if (pageRelativePath) {
       const pageDirPath = pageRelativePath.split('/').slice(0, -1).join('/')
       const pageRelativeFullPathWithExt = buildArticlePath(
@@ -78,13 +89,19 @@ function tryResolveArticlePath(
   return foundPage
 }
 
+/**
+ * Get the path for a page (without language/version)
+ */
 function getPageHref(page: Page): string {
   if (page.relativePath) {
     return Permalink.relativePathToSuffix(page.relativePath)
   }
-  return ''
+  return '' // fallback
 }
 
+/**
+ * Middleware to resolve carousel articles from rawCarousels object
+ */
 async function resolveCarousels(
   req: ExtendedRequest,
   res: Response,
@@ -94,6 +111,7 @@ async function resolveCarousels(
     const page = req.context?.page
     const rawCarousels = (page as unknown as PageCarouselProps)?.rawCarousels
 
+    // Handle carousels format
     if (rawCarousels && typeof rawCarousels === 'object') {
       const resolvedCarousels: Record<string, ResolvedArticle[]> = {}
 
@@ -102,6 +120,7 @@ async function resolveCarousels(
           continue
         }
 
+        // Remove duplicate articles
         const uniquePaths = [...new Set(articlePaths)]
         const resolved: ResolvedArticle[] = []
 
@@ -132,7 +151,7 @@ async function resolveCarousels(
         }
 
         if (resolved.length > 0) {
-          // Reject unsafe object keys to prevent prototype pollution.
+          // Prevent prototype pollution by rejecting __proto__ keys
           if (
             carouselKey !== '__proto__' &&
             carouselKey !== 'constructor' &&
@@ -143,6 +162,7 @@ async function resolveCarousels(
         }
       }
 
+      // Store resolved carousels on the page
       if (page && Object.keys(resolvedCarousels).length > 0) {
         ;(page as unknown as PageCarouselProps).carousels = resolvedCarousels
       }

@@ -13,8 +13,7 @@ category:
   - Manage cloud and local sandboxes for your organization
 ---
 
-> [!NOTE]
-> {% data reusables.cli.public-preview-cloud-sandbox %}
+{% data reusables.cli.public-preview-sandbox %}
 
 ## About enabling and disabling cloud sandboxes
 
@@ -50,3 +49,4 @@ Enterprise owners can control cloud sandbox access for all organizations in the 
 * [AUTOTITLE](/copilot/concepts/about-cloud-and-local-sandboxes)
 * [AUTOTITLE](/billing/concepts/product-billing/cloud-and-local-sandboxes)
 * [AUTOTITLE](/copilot/reference/enterprise-administrators/enterprise-managed-settings#sandbox)
+

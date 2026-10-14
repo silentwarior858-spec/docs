@@ -12,6 +12,7 @@ const context = {
   additionalProperties: false,
   required: ['event_id', 'user', 'version', 'created', 'path'],
   properties: {
+    // Required of all events
     event_id: {
       type: 'string',
       description: 'The unique identifier of the event.',
@@ -39,6 +40,7 @@ const context = {
       format: 'uuid',
     },
 
+    // Content information
     referrer: {
       type: 'string',
       description: 'The browser value of `document.referrer`.',
@@ -93,8 +95,12 @@ const context = {
     page_document_type: {
       type: 'string',
       description: 'The generic page document type based on URL path.',
-      // Keep in sync with get-document-type.ts.
-      enum: ['homepage', 'early-access', 'product', 'category', 'subcategory', 'article'],
+      enum: ['homepage', 'early-access', 'product', 'category', 'subcategory', 'article'], // get-document-type.ts
+    },
+    page_type: {
+      type: 'string',
+      description: 'Optional page type from the content frontmatter.',
+      enum: ['overview', 'quick_start', 'tutorial', 'how_to', 'reference', 'rai'], // frontmatter.ts
     },
     content_type: {
       type: 'string',
@@ -130,6 +136,7 @@ const context = {
         'The _octo cookie client ID for cross-subdomain tracking with github.com analytics.',
     },
 
+    // Device information
     os: {
       type: 'string',
       description: 'The type of operating system the user is working with.',
@@ -187,6 +194,7 @@ const context = {
       description: 'The raw user agent string from the browser.',
     },
 
+    // Location information
     timezone: {
       type: 'number',
       description: 'The timezone the user is in, as `new Date().getTimezoneOffset() / -60`.',
@@ -196,6 +204,7 @@ const context = {
       description: 'The browser value of `navigator.language`.',
     },
 
+    // Preference information
     os_preference: {
       type: 'string',
       enum: ['linux', 'mac', 'windows'],
@@ -215,12 +224,13 @@ const context = {
       description: 'How the user prefers to view code examples.',
     },
 
+    // Experiments
     experiment_variation: {
       type: 'string',
       description: 'The variation this user we bucketed in is in, such as control or treatment.',
     },
 
-    // The event group key and ID pair must be unique.
+    // Event Grouping. The comination of key + id should be unique
     event_group_key: {
       type: 'string',
       description: 'A enum indentifier (e.g. "ask-ai") used to put events into a specific group.',
@@ -408,8 +418,7 @@ const search = {
     },
     search_client: {
       type: 'string',
-      description:
-        "The client name identifier when the request is not from docs.github.com, or 'unknown' when the request sends no client_name.",
+      description: 'The client name identifier when the request is not from docs.github.com.',
     },
   },
 }
@@ -612,18 +621,22 @@ const preference = {
       type: 'string',
       enum: [
         ...new Set([
+          // application
           ...Object.keys(allTools),
+          // color_mode
           'dark',
           'light',
           'auto',
           'auto:dark',
           'auto:light',
+          // os
           'linux',
           'mac',
           'windows',
+          // code_display
           'beside',
           'inline',
-          // code_language can overlap with allTools, for example javascript.
+          // code_language (may overlap with allTools, e.g. 'javascript')
           ...Object.keys(codeLanguages),
         ]),
       ],
@@ -687,7 +700,7 @@ const validation = {
   },
 }
 
-// Avoid oneOf so validation returns a short error list.
+// We are not using `oneOf` to keep the list of errors short.
 export const schemas = {
   page,
   exit,

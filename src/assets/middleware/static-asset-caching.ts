@@ -14,7 +14,8 @@ export default function setStaticAssetCaching(
   return next()
 }
 
-// Checksummed URLs can keep manual surrogate keys because content changes produce new URLs.
+// True if the URL is known to contain some pattern of a checksum that
+// would make it intelligently different if its content has changed.
 function isChecksummed(path: string) {
   if (path.startsWith('/assets/cb-')) return true
   if (path.startsWith('/_next/static')) {

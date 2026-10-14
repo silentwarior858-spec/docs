@@ -27,7 +27,7 @@ export async function validate(filePath: string, options: Options) {
         console.log(prefix, `✅ ${check.url} (${check.identifier})`)
       }
     } else {
-      // A missing page counts as failure unless --ignore-not-found is set.
+      // This is a 404 - page not found
       if (options.ignoreNotFound) {
         console.log(prefix, `⚠️  ${check.url} (${check.identifier})`)
       } else {

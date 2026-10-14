@@ -6,6 +6,7 @@ intro: Learn how you can use {% data variables.product.prodname_copilot %} in yo
 versions:
   feature: copilot
 children:
+  - /about-copilot-cli
   - /comparing-cli-features
   - /copilot-cli-in-github-actions
   - /cancel-and-roll-back
@@ -15,6 +16,7 @@ children:
   - /autopilot
   - /fleet
   - /research
+  - /chronicle
   - /rubber-duck
   - /lsp-servers
   - /about-cli-extensions

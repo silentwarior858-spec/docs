@@ -55,12 +55,11 @@ export async function populateIndex(
       client.helpers.bulk({
         datasource: records,
         onDocument: () => ({ index: { _index: indexAlias } }),
-        // Keep bulk requests under 4 MB, because larger requests can return 429 from Elasticsearch.
-        flushBytes: 4 * 1024 * 1024,
+        flushBytes: 4 * 1024 * 1024, // 4MB - Prevents too large of a bulk request which results in a 429 from ES
         concurrency: 2,
         refreshOnCompletion: true,
         timeout: '5m',
-        // Use retryOnErrorTest instead of bulk retries and wait to control timing and logging.
+        // We could use `retries` and `wait` here, but then we don't have as granular control over logging and when to retry
       }),
     {
       attempts,
@@ -120,7 +119,8 @@ export async function updateAlias(
 
   const indices = await retryOnErrorTest(
     (error) => {
-      // A 404 can mean the index does not exist yet, so retry cat.indices.
+      // 404 can happen when you're trying to get an index that
+      // doesn't exist. ...yet!
       return error instanceof errors.ResponseError && error.meta.statusCode === 404
     },
     () => client.cat.indices({ format: 'json' }),

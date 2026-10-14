@@ -2,19 +2,20 @@ import type { Response, NextFunction } from 'express'
 
 import type { ExtendedRequest } from '@/types'
 
-// Strip protocol-relative prefixes so browsers cannot turn redirects into external URLs.
-// Example: //evil.com becomes /evil.com.
+// Normalizes a redirect URL to prevent open redirects via protocol-relative
+// URLs (e.g. "//evil.com" which browsers interpret as "https://evil.com").
 export function safeRedirectUrl(url: string): string {
   return url.replace(/^\/\/+/, '/')
 }
 
-// SafeRedirect matches the overloaded signature of Express res.redirect.
+// Matches the overloaded signature of Express's res.redirect().
 export type SafeRedirect = {
   (url: string): void
   (status: number, url: string): void
 }
 
-// Downstream middleware calls res.safeRedirect with the Express redirect signature.
+// Attaches res.safeRedirect() to the response for all downstream middleware.
+// Same signature as res.redirect() but normalizes the URL first.
 export default function safeRedirect(req: ExtendedRequest, res: Response, next: NextFunction) {
   res.safeRedirect = function (statusOrUrl: number | string, url?: string) {
     if (typeof statusOrUrl === 'number' && url !== undefined) {
