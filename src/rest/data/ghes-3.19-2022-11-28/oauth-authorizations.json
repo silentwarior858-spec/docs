@@ -1169,15 +1169,6 @@
                                   "write"
                                 ]
                               },
-                              "organization_external_properties_for_repos": {
-                                "type": "string",
-                                "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                                "enum": [
-                                  "read",
-                                  "write",
-                                  "admin"
-                                ]
-                              },
                               "organization_announcement_banners": {
                                 "type": "string",
                                 "description": "The level of permission to grant the access token to view and manage announcement banners for an organization.",
@@ -2139,15 +2130,6 @@
                               "enum": [
                                 "read",
                                 "write"
-                              ]
-                            },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
                               ]
                             },
                             "organization_announcement_banners": {
@@ -3124,15 +3106,6 @@
                                 "write"
                               ]
                             },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
-                              ]
-                            },
                             "organization_announcement_banners": {
                               "type": "string",
                               "description": "The level of permission to grant the access token to view and manage announcement banners for an organization.",
@@ -4022,15 +3995,6 @@
                               "enum": [
                                 "read",
                                 "write"
-                              ]
-                            },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
                               ]
                             },
                             "organization_announcement_banners": {
@@ -5012,15 +4976,6 @@
                                 "write"
                               ]
                             },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
-                              ]
-                            },
                             "organization_announcement_banners": {
                               "type": "string",
                               "description": "The level of permission to grant the access token to view and manage announcement banners for an organization.",
@@ -5911,15 +5866,6 @@
                               "enum": [
                                 "read",
                                 "write"
-                              ]
-                            },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
                               ]
                             },
                             "organization_announcement_banners": {
@@ -6846,15 +6792,6 @@
                               "enum": [
                                 "read",
                                 "write"
-                              ]
-                            },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
                               ]
                             },
                             "organization_announcement_banners": {
@@ -7826,15 +7763,6 @@
                               "enum": [
                                 "read",
                                 "write"
-                              ]
-                            },
-                            "organization_external_properties_for_repos": {
-                              "type": "string",
-                              "description": "The level of permission to grant the access token for managing external custom properties for repositories in an organization.",
-                              "enum": [
-                                "read",
-                                "write",
-                                "admin"
                               ]
                             },
                             "organization_announcement_banners": {

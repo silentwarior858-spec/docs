@@ -1,4 +1,4 @@
-// These ESLint plugins do not ship TypeScript definitions.
+// Type declarations for ESLint plugins without official TypeScript definitions
 
 declare module 'eslint-plugin-github' {
   import type { ESLint, Linter } from 'eslint'

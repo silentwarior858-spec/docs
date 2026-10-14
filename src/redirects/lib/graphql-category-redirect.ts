@@ -1,8 +1,12 @@
-// Redirect legacy kind-based GraphQL reference URLs, such as
-// /graphql/reference/scalars#boolean, to per-category reference URLs, such as
-// /graphql/reference/other#scalar-boolean.
+// Dynamic redirect from legacy kind-based GraphQL reference URLs
+// (e.g. `/graphql/reference/scalars#boolean`) to the per-category
+// reference URLs (e.g. `/graphql/reference/other#scalar-boolean`)
+// introduced when docs-internal adopted the upstream `@docsCategory`
+// directive.
 //
-// Resolve in one hop because URL fragments are not sent on subsequent requests.
+// Resolved in a single hop so the type-name (in the URL fragment) is not
+// lost: fragments are not sent on subsequent requests, so we can't chain a
+// /v4 redirect to a removed kind page and recover the type later.
 
 import fs from 'fs'
 import path from 'path'
@@ -17,15 +21,15 @@ import {
 } from '@/graphql/lib/categories'
 import { supported as supportedGhes } from '@/versions/lib/enterprise-server-releases'
 
-// URL kind segment input-objects maps to internal kind key inputObjects.
+// URL kind segment (e.g. "input-objects") -> internal kind key (e.g. "inputObjects").
 const URL_TO_KIND_KEY: Record<string, SchemaKindKey> = Object.fromEntries(
   ALL_KIND_KEYS.map((k) => [KIND_URL_SEGMENT[k], k]),
 )
 
-// Accept only these legacy kind segments for redirect parsing.
+// Set of legacy kind URL segments we redirect from.
 const LEGACY_KIND_SEGMENTS = new Set(Object.keys(URL_TO_KIND_KEY))
 
-// Per-version lookup maps kind key to lowercased ID to category slug.
+// Per-version lookup: kind key -> id (lowercased) -> category slug.
 type CategoryMap = Partial<Record<SchemaKindKey, Record<string, string>>>
 
 const dataDir = path.join(process.cwd(), 'src/graphql/data')
@@ -44,36 +48,42 @@ function loadCategoryMap(version: string): CategoryMap | null {
   return map
 }
 
-// Unsupported and archived versions pass through because they have no GraphQL data directory.
+// Map URL version segment to a graphql data directory name. Returns null for
+// unsupported / archived versions so the caller can pass them through.
 function versionUrlToDataDir(versionSegment: string | null): string | null {
   if (!versionSegment || versionSegment === 'free-pro-team@latest') return 'fpt'
   if (versionSegment === 'enterprise-cloud@latest') return 'ghec'
   const m = /^enterprise-server@(\d+\.\d+)$/.exec(versionSegment)
   if (m && supportedGhes.includes(m[1])) return `ghes-${m[1]}`
-  // enterprise-server@latest has category data, but earlier middleware resolves it.
+  // enterprise-server@latest also has category data via its current alias,
+  // but middleware order means we shouldn't see it here. Pass through.
   return null
 }
 
 const LANGUAGE_RE = new RegExp(`^(${languageKeys.join('|')})$`)
 const VERSION_RE = /^(free-pro-team@latest|enterprise-cloud@latest|enterprise-server@[\d.]+)$/
 
-// Parse only legacy GraphQL reference kind URLs.
+// Parse a docs URL path into its segments. Returns null if the path is not a
+// graphql-reference legacy kind URL.
 interface ParsedLegacyUrl {
   language: string | null
   version: string | null
   kindSegment: string
-  // Lowercased type ID from the URL fragment, if any.
+  // Type id (lowercased) parsed from the URL fragment, if any.
   typeId: string | null
 }
 
 function parseLegacyUrl(input: string): ParsedLegacyUrl | null {
-  // Callers pass path-only redirects, with optional fragments but no query strings.
+  // We accept `redirect` strings that may include a `#fragment` but should not
+  // include a query string at this point (callers pass the path-only form).
   const hashIndex = input.indexOf('#')
   const pathPart = hashIndex >= 0 ? input.slice(0, hashIndex) : input
   const fragment = hashIndex >= 0 ? input.slice(hashIndex + 1) : ''
 
   const segments = pathPart.split('/').filter(Boolean)
-  // The legacy shape allows optional language and version segments before graphql/reference/kind.
+  // Expect segments to look like:
+  //   [<lang>?, <version>?, "graphql", "reference", "<kind>"]
+  // with optional language and optional version.
   const refIdx = segments.indexOf('reference')
   if (refIdx < 0) return null
   if (segments[refIdx - 1] !== 'graphql') return null
@@ -82,7 +92,7 @@ function parseLegacyUrl(input: string): ParsedLegacyUrl | null {
   const kindSegment = segments[refIdx + 1]
   if (!LEGACY_KIND_SEGMENTS.has(kindSegment)) return null
 
-  // Segments before graphql can be empty, language, version, or language plus version.
+  // The bits before "graphql" can be: nothing, [lang], [version], or [lang, version].
   const preface = segments.slice(0, refIdx - 1)
   let language: string | null = null
   let version: string | null = null
@@ -108,9 +118,13 @@ function buildPrefix(language: string | null, version: string | null): string {
   return out
 }
 
-// Resolve legacy type URLs to category pages and bare kind URLs to the reference root.
+// Resolve a legacy URL to its category-based equivalent. Returns null if the
+// input is not a legacy URL or its version is not supported (so callers leave
+// it alone).
 //
-// fallbackLanguage keeps language-less inputs valid against req.context.pages.
+// `fallbackLanguage` is used when the input URL has no language segment so the
+// rewritten URL is still valid against the language-prefixed `req.context.pages`
+// lookup downstream.
 export function applyGraphqlCategoryRedirect(
   redirect: string,
   fallbackLanguage: string = 'en',
@@ -124,7 +138,8 @@ export function applyGraphqlCategoryRedirect(
   const language = parsed.language ?? fallbackLanguage
   const prefix = buildPrefix(language, parsed.version)
 
-  // Legacy bare kind pages like /graphql/reference/scalars redirect to the reference root.
+  // No fragment: legacy bare kind page (e.g. /graphql/reference/scalars). The
+  // kind index doesn't exist anymore; send the user to the reference root.
   if (!parsed.typeId) {
     return `${prefix}/graphql/reference`
   }
@@ -137,7 +152,8 @@ export function applyGraphqlCategoryRedirect(
   return `${prefix}/graphql/reference/${category}#${slugPrefix}-${parsed.typeId}`
 }
 
-// Tests reset the per-version cache to reload fixture maps without exporting through the barrel.
+// Test-only helper to reset the per-version cache so unit tests can reload
+// fixture maps. Not exported through the public barrel.
 export function __resetGraphqlCategoryCacheForTests(): void {
   lookupCache.clear()
 }

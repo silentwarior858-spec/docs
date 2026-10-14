@@ -7,7 +7,6 @@ import {
   versionFromResolvedKey,
 } from '@/links/lib/page-anchors'
 import type { Page } from '@/types'
-import { latest } from '@/versions/lib/enterprise-server-releases'
 
 describe('versionFromResolvedKey', () => {
   test('returns null for an unversioned (free-pro-team) key', () => {
@@ -21,8 +20,8 @@ describe('versionFromResolvedKey', () => {
   })
 
   test('reads an explicit enterprise-server release prefix', () => {
-    expect(versionFromResolvedKey(`/en/enterprise-server@${latest}/actions/foo`)).toBe(
-      `enterprise-server@${latest}`,
+    expect(versionFromResolvedKey('/en/enterprise-server@3.17/actions/foo')).toBe(
+      'enterprise-server@3.17',
     )
   })
 
@@ -73,7 +72,7 @@ describe('findLinkLines', () => {
   })
 
   test('does not match a fragment that merely starts with the needle', () => {
-    // A substring search would report /a#foobar as a match for /a#foo.
+    // A substring search would report line 1 for `/a#foo` because `/a#foobar` starts with it.
     const content = ['[x](/a#foobar)', '[y](/a#foo)'].join('\n')
     expect(findLinkLines(content, '/a#foo')).toEqual([2])
   })
@@ -106,7 +105,8 @@ describe('findLinkLines', () => {
 })
 
 describe('resolveLinkKeyForVersion', () => {
-  // GHEC-only targets need source-version retry because they have no unversioned permalink.
+  // A GHEC-only target has no unversioned permalink, so a bare href only resolves when
+  // retried against the source page's version.
   const pageMap = {
     '/en/get-started/foo': {} as Page,
     '/en/enterprise-cloud@latest/admin/bar': {} as Page,
@@ -149,7 +149,9 @@ describe('resolveLinkKeyForVersion', () => {
     expect(resolveLinkKeyForVersion('/nope/nope', 'free-pro-team@latest', pageMap)).toBe(null)
   })
 
-  // Shared targets have FPT and enterprise keys; enterprise runs must prefer the latter.
+  // A target that applies to both FPT and an enterprise version has a key for each.
+  // The enterprise key has to win during that version's run, otherwise the anchor is
+  // looked up under the FPT key while the heading cache holds the enterprise permalink.
   const sharedPageMap = {
     '/en/get-started/shared': {} as Page,
     '/en/enterprise-server@3.17/get-started/shared': {} as Page,

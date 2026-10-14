@@ -1,3 +1,4 @@
+// Interfaces for content linter rule parameters and callbacks
 export interface MarkdownToken {
   type: string
   tag?: string
@@ -11,9 +12,9 @@ export interface MarkdownToken {
 
 export interface RuleParams {
   name: string // file path
-  lines: string[]
-  frontMatterLines: string[]
-  tokens?: MarkdownToken[] // present only when the rule uses the markdownit parser
+  lines: string[] // array of lines from the file
+  frontMatterLines: string[] // array of frontmatter lines
+  tokens?: MarkdownToken[] // markdown tokens (when using markdownit parser)
   config?: {
     [key: string]: unknown // rule-specific configuration
   }

@@ -30,16 +30,21 @@ export default async function manifestJson(req: Request, res: Response, next: Ne
   }
 
   if (req.url !== '/manifest.json') {
-    // Examples: /manifest.json/anything and /manifest.json?foo=bar.
+    // E.g. `/manifest.json/anything` or `/manifest.json?foo=bar`
     defaultCacheControl(res)
     return res.safeRedirect(302, '/manifest.json')
   }
 
   const icons: Icon[] = []
 
-  // The manifest mirrors https://github.com/manifest.json.
+  // This is modelled after https://github.com/manifest.json
   const manifest = {
-    // Localized home pages title the site GitHub Docs, so one manifest covers every language.
+    // In the future we might want to have a different manifest for each
+    // language. Particularly, the `name` property.
+    // But as of May 2023, this is overkill because all translations's
+    // home page refer to the name of the site as "GitHub Docs".
+    // For example, on https://docs.github.com/ja the `<title>`
+    // is "GitHub Docs".
     name: 'GitHub Docs',
     short_name: 'GitHub Docs',
     start_url: '/',

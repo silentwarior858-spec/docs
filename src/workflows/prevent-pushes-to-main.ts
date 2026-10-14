@@ -1,4 +1,9 @@
-// Pre-push hooks use this script to block accidental pushes to main.
+// [start-readme]
+
+// This script is intended to be used as a git "prepush" hook.
+// If the current branch is main, it will exit unsuccessfully and prevent the push.
+
+// [end-readme]
 
 import { execSync } from 'child_process'
 

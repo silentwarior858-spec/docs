@@ -18,6 +18,7 @@ type getGeneralSearchResultsParams = {
   searchParams: ComputedSearchQueryParamsMap['generalSearch']
 }
 
+// Query Elasticsearch for general search results
 export async function getGeneralSearchResults(
   args: getGeneralSearchResultsParams,
 ): Promise<GeneralSearchResponse> {
@@ -68,7 +69,7 @@ export async function getGeneralSearchResults(
 
   const matchBool: estypes.QueryDslBoolQuery = {
     should: matchQueries,
-    // Filters make should clauses optional, so require a match before toplevel filters apply.
+    // This allows filtering by toplevel later.
     minimum_should_match: 1,
   }
   const matchQuery: estypes.QueryDslQueryContainer = {
@@ -87,7 +88,7 @@ export async function getGeneralSearchResults(
   }
 
   const highlightFields = Array.from(highlights || DEFAULT_HIGHLIGHT_FIELDS)
-  // content_explicit mirrors content highlight requests.
+  // These acts as an alias convenience
   if (highlightFields.includes('content')) {
     highlightFields.push('content_explicit')
   }
@@ -101,7 +102,12 @@ export async function getGeneralSearchResults(
     from,
     size,
     aggs,
-    // Only requested source fields cross the network.
+
+    // Since we know exactly which fields from the source we're going
+    // need we can specify that here. It's an inclusion list.
+    // We can save precious network by not having to transmit fields
+    // stored in Elasticsearch to here if it's not going to be needed
+    // anyway.
     _source_includes: ['title', 'url', 'breadcrumbs', 'popularity', 'toplevel'],
   }
 
@@ -112,7 +118,8 @@ export async function getGeneralSearchResults(
   }
 
   if (sort === 'best') {
-    // function_score multiplies relevance by popularity for best-first ranking.
+    // To sort by a function score, you need to wrap the primary
+    // match query into a bool operation.
     searchQuery.query = {
       bool: {
         must: [
@@ -125,7 +132,9 @@ export async function getGeneralSearchResults(
                 {
                   field_value_factor: {
                     field: 'popularity',
+                    // modifier: 'log1p',
                     factor: 1.0,
+                    // missing: 0.0001,
                     missing: 1.0,
                   },
                 },
@@ -136,7 +145,10 @@ export async function getGeneralSearchResults(
       },
     }
   } else if (sort === 'relevance') {
-    // Relevance sort skips popularity because near-unique scores make it ineffective.
+    // Do nothing, it's the default.
+    // We could have a secondary sort on the 'popularity' but the
+    // chances of this ever doing anything is very weak because of the
+    // floating point almost always being different.
     searchQuery.query = matchQuery
   } else {
     throw new Error(`Unrecognized sort enum '${sort}'`)
@@ -212,10 +224,6 @@ interface GetMatchQueriesOptions {
   }
 }
 
-// For autocomplete, getMatchQueries skips match_phrase_prefix on content.
-// match_phrase_prefix matches preceding terms and expands the last word, so
-// short category pages that list titles over-rank:
-// https://www.elastic.co/guide/en/elasticsearch/reference/7.17/query-dsl-match-query-phrase-prefix.html#match-phrase-prefix-query-notes
 function getMatchQueries(
   query: string,
   { usePrefixSearch, fuzzy }: GetMatchQueriesOptions,
@@ -226,16 +234,40 @@ function getMatchQueries(
   const BOOST_CONTENT = 1.0
   const BOOST_AND = 2.5
   const BOOST_EXPLICIT = 6.5
-  // Fuzzy title matches get a low boost so exact and phrase matches dominate ranking.
+  // Number doesn't matter so much but just make sure it's
+  // boosted low. Because we only really want this to come into
+  // play if nothing else matches. E.g. a search for `AcIons`
+  // which wouldn't find anything else anyway.
   const BOOST_FUZZY = 0.1
 
   const matchQueries: estypes.QueryDslQueryContainer[] = []
 
-  // Spaces or hyphens enable phrase and AND-operator matching.
+  // If the query input is multiple words, it's good to know because you can
+  // make the query do `match_phrase` and you can make `match` query
+  // with the `AND` operator (`OR` is the default).
   const isMultiWordQuery = query.includes(' ') || query.includes('-')
 
   if (isMultiWordQuery) {
-    // Ordinary title word matches beat ordinary content phrase matches.
+    // If the query contains spaces, prioritize a "match phrase" query
+    // beyond a regular "match" query.
+    // Basically, that means if you search for 'foo bar' we'd rather
+    // rank:
+    //     "A common term is foo bar which is often used"
+    // above:
+    //     "Some people use foo"
+    //     "Bar is also a common term"
+    //
+    // So that, when all are matched you get this rank:
+    //     1. "A common term is foo bar which is often used"
+    //     2. "Some people use foo"
+    //     3. "Bar is also a common term"
+    //
+    // But note, a "match phrase" isn't the holy panacea of matches.
+    // In particular, just because there exists a document whose *content*
+    // contains the phrase "... foo bar ..." we might still prefer the
+    // matches on title that contains the words *separately*. This
+    // is why a 'match_phrase' on 'content' has a lesser boost
+    // that a 'match' on 'title'.
     const matchPhraseStrategy = usePrefixSearch ? 'match_phrase_prefix' : 'match_phrase'
     matchQueries.push(
       ...[
@@ -253,6 +285,13 @@ function getMatchQueries(
         { [matchPhraseStrategy]: { headings: { boost: BOOST_PHRASE * BOOST_HEADINGS, query } } },
       ],
     )
+    // If the content is short, it is given a disproportionate advantage
+    // in search ranking. For example, our category and subcategory pages
+    // often includes a list of other document titles but because it's so
+    // short it thinks that content is really relevant. This only applies
+    // when you use `match_phrase_prefix` which first makes a search
+    // all preceeding terms and then manually appends matches on the last word.
+    // See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/query-dsl-match-query-phrase-prefix.html#match-phrase-prefix-query-notes
     if (!usePrefixSearch) {
       matchQueries.push(
         ...[
@@ -267,7 +306,7 @@ function getMatchQueries(
     }
   }
 
-  // Quoted multi-word queries skip per-word matching so phrase search stays strict.
+  // Unless the query was something like `"foo bar"` search on each word
   if (!(isMultiWordQuery && query.startsWith('"') && query.endsWith('"'))) {
     const matchStrategy = usePrefixSearch ? 'match_bool_prefix' : 'match'
     if (isMultiWordQuery) {
@@ -336,7 +375,10 @@ function getMatchQueries(
     )
   }
 
-  // Fuzzy matching applies only within the configured length bounds.
+  // Add a fuzzy query if it's not too short or too long.
+  // Might consider only enabling this when there's no space in the query
+  // because something like "githob actions" will overwhelmingly
+  // match on the "actions" part with the regular 'match' query.
   if (query.length > fuzzy.minLength && query.length < fuzzy.maxLength) {
     matchQueries.push({
       fuzzy: {
@@ -345,20 +387,22 @@ function getMatchQueries(
     })
   }
 
-  // Single-token URL searches also match page paths.
+  // If the query is just a single no-space word...
   if (query.split(/\s/g).length === 1) {
-    // A path query such as /en/site-policy/github-company-policies matches url.
+    // E.g. someone searched for `/en/site-policy/github-company-policies`
     if (query.startsWith('/')) {
       matchQueries.push({
         match: { url: query.split('?')[0].split('#')[0] },
       })
     } else if (query.startsWith('http')) {
-      // Full docs.github.com URLs match their pathname, such as /en/some/page.
+      // E.g. `https://docs.github.com/en/some/page?foo=bar`
+      // will become a search on `{url: '/en/some/page'}`
       let pathname: string | undefined
       try {
         pathname = new URL(query).pathname
       } catch {
-        // Invalid URL strings do not add a url match.
+        // If it failed, it can't be initialized with the `URL` constructor
+        // so we can deem it *not* a valid URL.
       }
       if (pathname) {
         matchQueries.push({
@@ -391,7 +435,14 @@ function getHits(
   { indexName, debug = false, highlightFields, include }: GetHitsOptions,
 ): GeneralSearchHit[] {
   return hits.map((hit) => {
-    // Requested highlight fields get keys even when empty, so the response matches the request.
+    // Return `hit.highlights[...]` based on the highlight fields requested.
+    // So if you searched with `&highlights=headings&highlights=content`
+    // this will become:
+    //   {
+    //      content: [...],
+    //      headings: [...]
+    //   }
+    // even if there was a match on 'title'.
     const hitHighlights: Record<string, string[]> = {}
     for (const key of highlightFields) {
       hitHighlights[key] = (hit.highlight && hit.highlight[key]) || []

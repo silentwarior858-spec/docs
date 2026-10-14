@@ -31,13 +31,14 @@ describe(incorrectAltTextLength.names.join(' - '), () => {
     const markdown = [
       '# Heading',
       '',
-      // Empty alt text has no valid range.
+      // Completely empty
       '![](/images/this-is-ok.png)',
     ].join('\n')
     const result = await runRule(incorrectAltTextLength as Rule, { strings: { markdown } })
     const errors = result.markdown
     expect(errors.length).toBe(1)
     expect(errors[0].lineNumber).toBe(3)
+    // Because you can't get a valid range when it's entirely empty
     expect(errors[0].errorRange).toEqual(null)
   })
 })

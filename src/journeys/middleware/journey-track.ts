@@ -35,14 +35,15 @@ export default async function journeyTrack(
   try {
     const page = req.context.page as PageWithJourneys
 
+    // If this page has journey tracks defined, resolve them for the landing page
     if (page.journeyTracks) {
       const resolvedTracks = await resolveJourneyTracks(page.journeyTracks, req.context)
 
-      // getServerSideProps reads resolvedJourneyTracks from the page object.
+      // Store resolved tracks on the page context for later use in getServerSideProps
       page.resolvedJourneyTracks = resolvedTracks
     }
 
-    // Resolve every article because guide pages do not carry their own journeyTracks.
+    // Always try to resolve journey context (for navigation on guide articles)
     const journeyContext = await resolveJourneyContext(
       req.pagePath || '',
       req.context.pages || {},

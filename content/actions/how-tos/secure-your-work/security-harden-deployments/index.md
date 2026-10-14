@@ -13,7 +13,6 @@ versions:
 children:
   - /oidc-in-aws
   - /oidc-in-azure
-  - /oidc-in-docker
   - /oidc-in-google-cloud-platform
   - /oidc-in-hashicorp-vault
   - /oidc-in-jfrog

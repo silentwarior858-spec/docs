@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import type { JSX } from 'react'
 import remarkGfm from 'remark-gfm'
-import cx from 'clsx'
+import cx from 'classnames'
 import { IconButton } from '@primer/react'
 import { CopyIcon, CheckIcon } from '@primer/octicons-react'
 import { announce } from '@primer/live-region-element'
@@ -38,18 +38,22 @@ export const UnrenderedMarkdownContent = ({
 }: MarkdownContentPropsT) => {
   const { t } = useTranslation('search')
 
+  // Overrides for ReactMarkdown components
   const components = {} as Components
   if (codeBlocksCopyable) {
-    // Multiline code blocks need a custom renderer so the copy button can copy raw text.
+    // Override the default code block to make multiline code blocks copyable
     components.code = ({ ...props }) => {
+      // get the literal text of the code block
       let text = String(props.children)
+      // If the codeblock is not multiline, return inline code block without copy functionality
       if (!text.includes('\n')) {
         return <code {...props}>{props.children}</code>
       } else {
+        // Otherwise it's multiline and we want to make it copyable
         text = text.replace(/\n$/, '')
       }
 
-      // The copy button announces the language when the code fence exposes one.
+      // Extract language from className for better accessibility
       const language = props.className?.startsWith('language-')
         ? props.className.replace('language-', '')
         : ''
@@ -58,6 +62,7 @@ export const UnrenderedMarkdownContent = ({
         successDuration: 2000,
       })
 
+      // Create more descriptive aria-label
       const getAriaLabel = () => {
         if (isCopied) {
           return t('search.ai.response.copied_code')
@@ -92,20 +97,23 @@ export const UnrenderedMarkdownContent = ({
     }
   }
 
-  // Custom anchors preserve feature query params and can force links into new tabs.
+  // Override the default anchor tag to open links in a new tab and include specific query parameters
   components.a = ({ ...props }) => {
     let href = props.href || ''
     let existingAnchorParams = ''
+    // When we want to include specific query parameters in the URL
     if (includeQueryParams) {
       if (href.includes('?')) {
         href = href.split('?')[0]
         existingAnchorParams = href.split('?')[1]
       }
+      // Include feature, search-overlay-ask-ai, and search-overlay-input query parameters if they exist in the current URL
       const existingURLParams = new URLSearchParams(window.location.search)
       const newParams = new URLSearchParams()
       if (existingURLParams.get('feature')) {
         newParams.set('feature', existingURLParams.get('feature') || '')
       }
+      // Combine new and existing query parameters
       if (newParams.toString()) {
         href = `${href}?${existingAnchorParams}&${newParams.toString()}`
       }
@@ -117,7 +125,7 @@ export const UnrenderedMarkdownContent = ({
         target={openLinksInNewTab ? '_blank' : undefined}
         rel={openLinksInNewTab ? 'noopener noreferrer' : undefined}
         onClick={(e) => {
-          // Explicit window.open keeps new-tab links working when the default click path does not.
+          // For some reason we need to override the default onClick to get these links to open in a new tab
           if (openLinksInNewTab) {
             e.stopPropagation()
             e.preventDefault()

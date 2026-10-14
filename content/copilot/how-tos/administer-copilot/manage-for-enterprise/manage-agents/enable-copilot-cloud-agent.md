@@ -20,8 +20,6 @@ redirect_from:
 contentType: how-tos
 category:
   - Manage Copilot for a team
-docsTeamMetrics:
-  - ai-governance
 ---
 
 ## Prerequisites

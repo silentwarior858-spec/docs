@@ -21,10 +21,12 @@ describe('removeStaleRestDataFiles', () => {
   })
 
   test('removes stale .json files not written during sync', async () => {
+    // Simulate pre-existing files on disk
     await writeFile(path.join(versionDir, 'actions.json'), '{}')
     await writeFile(path.join(versionDir, 'agent-tasks.json'), '{}')
     await writeFile(path.join(versionDir, 'repos.json'), '{}')
 
+    // Only actions.json and repos.json were produced by the sync
     const writtenFiles = new Map<string, Set<string>>()
     writtenFiles.set(versionDir, new Set(['actions.json', 'repos.json']))
 
@@ -84,6 +86,7 @@ describe('removeStaleRestDataFiles', () => {
     const writtenFiles = new Map<string, Set<string>>()
     writtenFiles.set(nonexistent, new Set(['actions.json']))
 
+    // Should not throw
     await removeStaleRestDataFiles(writtenFiles)
   })
 })

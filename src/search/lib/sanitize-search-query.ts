@@ -1,52 +1,54 @@
-// Redact PII and secrets from search queries before logging.
-// Stateless ghs tokens contain dots; GitHub's token pattern also allows hyphens.
-// The token class includes . and -:
-// https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/
+// Remove PII from search queries before logging
+// Redacts common PII patterns like emails, tokens, and other sensitive data
+
 export function sanitizeSearchQuery(query: string): string {
   if (!query) return query
 
   let sanitized = query
 
-  // Email addresses can identify users in logs.
+  // Redact email addresses
   sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL]')
 
-  // GitHub token prefixes include ghp, gho, ghu, ghs, and ghr.
+  // Redact GitHub tokens (all formats)
+  // Classic tokens: ghp_, gho_, ghu_, ghs_, ghr_
+  // See https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/
   sanitized = sanitized.replace(/(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9._-]{20,}/gi, '[TOKEN]')
-  // github_pat identifies fine-grained personal access tokens.
+  // Fine-grained personal access tokens: github_pat_
   sanitized = sanitized.replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/gi, '[TOKEN]')
-  // gho identifies OAuth tokens.
+  // OAuth tokens: gho_
   sanitized = sanitized.replace(/\bgho_[A-Za-z0-9]{20,}\b/gi, '[TOKEN]')
 
-  // UUIDs can identify private resources in logs.
+  // Redact UUIDs
   sanitized = sanitized.replace(
     /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
     '[UUID]',
   )
 
-  // JWTs have three base64url segments.
+  // Redact JWT tokens (format: xxx.yyy.zzz where each part is base64url)
   sanitized = sanitized.replace(
     /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
     '[JWT]',
   )
 
-  // Validate each IP octet to avoid over-redacting dotted numbers.
+  // Redact IP addresses (with proper validation for 0-255 range)
   sanitized = sanitized.replace(
     /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g,
     '[IP]',
   )
 
-  // Private key headers reveal pasted secrets.
+  // Redact SSH private key headers
   sanitized = sanitized.replace(/-----BEGIN( [A-Z]+)? PRIVATE KEY-----/g, '[SSH_KEY]')
 
-  // Long mixed-character strings often indicate API keys or other secrets.
+  // Redact potential API keys (long strings of hex or base64-like characters)
+  // This catches high-entropy strings that might be secrets
   sanitized = sanitized.replace(/\b[A-Za-z0-9_-]{40,}\b/g, (match) => {
-    // Mixed case and numbers avoid over-redacting ordinary long words.
+    // Only redact if it looks like high entropy (mixed case, numbers)
     const hasLowerCase = /[a-z]/.test(match)
     const hasUpperCase = /[A-Z]/.test(match)
     const hasNumbers = /[0-9]/.test(match)
     const entropyIndicators = [hasLowerCase, hasUpperCase, hasNumbers].filter(Boolean).length
 
-    // Two character classes meet the secret heuristic.
+    // If it has at least 2 of the 3 character types, it's likely a secret
     if (entropyIndicators >= 2) {
       return '[SECRET]'
     }

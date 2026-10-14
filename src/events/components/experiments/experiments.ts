@@ -4,33 +4,30 @@ export const CONTROL_VARIATION = 'control'
 type Experiment = {
   key: ExperimentNames
   isActive: boolean
-  // Missing percentOfUsersToGetExperiment defaults to 50.
+  // If percentOfUsersToGetExperiment is not provided, it will default to 50
   percentOfUsersToGetExperiment?: number
-  // Only one experiment can include its variation in the event context at a time.
+  // Only one experiment's control group (variation) can be included in the context at a time
   includeVariationInContext?: boolean
   limitToLanguages?: string[]
-  // Limit to specific version keys, such as enterprise-cloud@latest.
   limitToVersions?: string[]
-  // Staff readers with the staffonly cookie always see treatment when this is true.
   alwaysShowForStaff: boolean
-  // feature=<value> forces treatment and forwards across link navigation.
   turnOnWithURLParam?: string
 }
 
+// Update this with the name of the experiment, e.g. | 'example_experiment'
 export type ExperimentNames = 'placeholder_experiment' | 'readability_copilot'
 
-// To add an experiment, see README.md in this directory.
 export const EXPERIMENTS = {
-  // The placeholder keeps ExperimentNames compatible when no active experiments exist.
+  // Placeholder experiment to maintain type compatibility
   placeholder_experiment: {
     key: 'placeholder_experiment',
-    isActive: false,
+    isActive: false, // Inactive placeholder
     percentOfUsersToGetExperiment: 0,
     includeVariationInContext: false,
     limitToLanguages: [],
     limitToVersions: [],
     alwaysShowForStaff: false,
-    turnOnWithURLParam: 'placeholder',
+    turnOnWithURLParam: 'placeholder', // Placeholder URL param
   },
   readability_copilot: {
     key: 'readability_copilot',
@@ -42,6 +39,22 @@ export const EXPERIMENTS = {
     alwaysShowForStaff: true,
     turnOnWithURLParam: 'readability',
   },
+  /*  Add new experiments here, example:
+  'example_experiment': {
+      key: 'example_experiment',
+      isActive: true, // Set to false when the experiment is over
+      percentOfUsersToGetExperiment: 10, // 10% of users will randomly get the experiment
+      includeVariationInContext: true, // All events will include the `experiment_variation` of the `example_experiment`
+      limitToLanguages: ['en'], // Only users with the `en` language will be included in the experiment
+      limitToVersions: [
+        'free-pro-team@latest',
+        'enterprise-cloud@latest',
+        'enterprise-server@latest',
+      ], // Only enable for the latest versions
+      alwaysShowForStaff: true, // When set to true, staff will always see the experiment (determined by the `staffonly` cookie)
+      turnOnWithURLParam: 'example', // When the query param `?feature=example` is set, the experiment will be enabled
+    }
+  */
 } as Record<ExperimentNames, Experiment>
 
 export function getActiveExperiments(locale: string, version?: string): Experiment[] {
@@ -55,10 +68,12 @@ export function getActiveExperiments(locale: string, version?: string): Experime
       include = false
     }
 
+    // Only include experiment if it's supported for the current language
     if (experiment.limitToLanguages?.length && !experiment.limitToLanguages.includes(locale)) {
       include = false
     }
 
+    // Only include experiment if it's supported for the current version
     if (experiment.limitToVersions?.length && !experiment.limitToVersions.includes(version || '')) {
       include = false
     }

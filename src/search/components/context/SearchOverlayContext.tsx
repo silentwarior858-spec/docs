@@ -1,3 +1,4 @@
+// Context to manage the state of the SearchOverlay
 import { createContext, useContext, PropsWithChildren } from 'react'
 import { useQueryParam } from '@/frame/components/hooks/useQueryParam'
 

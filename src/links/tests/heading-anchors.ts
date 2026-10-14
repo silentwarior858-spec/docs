@@ -57,7 +57,7 @@ describe('computeHeadingIds', () => {
   })
 
   test('reproduces Liquid-rendered heading with variable already expanded', () => {
-    // Liquid rendering expands the variable to plain text before slugging.
+    // After Liquid render, the variable is expanded to plain text; the full slug includes it.
     const ids = computeHeadingIds(
       '## Disabling or enabling Copilot coding agent in your repositories',
     )

@@ -9,8 +9,6 @@ redirect_from:
 permissions: 'Enterprise owners can install {% data variables.product.prodname_github_apps %} on their enterprise. App managers cannot install apps at the enterprise level.'
 category:
   - Install and authorize apps
-docsTeamMetrics:
-  - enterprise-onboarding
 ---
 
 > [!NOTE]

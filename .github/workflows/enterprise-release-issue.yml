@@ -1,12 +1,13 @@
 name: Open Enterprise release or deprecation issue
 
-# GHES releases and deprecations follow a predictable schedule, so this workflow opens
-# their planning issues automatically.
+# **What it does**: Checks if there is an Enterprise release or deprecation upcoming, and if so, opens an issue with the tasks to be completed.
+# **Why we have it**: GHES releases and deprecations run on a predictable schedule, so we can automate some of the project management aspects.
+# **Who does it impact**: Docs engineering, docs content.
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 16 * * 1'
+    - cron: '20 16 * * 1' # Run every Monday at 16:20 UTC / 8:20 PST
 
 permissions:
   contents: read

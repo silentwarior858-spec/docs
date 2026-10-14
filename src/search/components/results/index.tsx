@@ -22,14 +22,17 @@ export function Search() {
 
   const { query } = search.searchParams
 
-  // documentPage is content/search/index.md, not the page query param for pagination.
+  // A reference to the `content/search/index.md` Page object.
+  // Not to be confused with the "page" that is for paginating
+  // results.
   const { allVersions, page: documentPage } = useMainContext()
   const searchVersion = allVersions[currentVersion].versionTitle
 
   const { results, validationErrors } = search
   const hasQuery = Boolean((query && query.trim()) || '')
 
-  // useMainContext runs on every request, including requests without a page.
+  // Mostly to satisfy TypeScript because the useMainContext hook
+  // is run on every request and every request doesn't have a page.
   let pageTitle = documentPage?.fullTitle || 'Search'
   if (hasQuery) {
     pageTitle = `${t('search_results_for')} "${query.trim()}"`
@@ -54,7 +57,11 @@ export function Search() {
         </div>
       )}
 
-      {/* Empty query validates as an error, but /en/search shows the no-query state instead. */}
+      {/* Not having a query is actually a validation error.
+        But it's a bit harsh to call it an "error".
+        Simply going to "/en/search" shouldn't show an error message.
+        It should be a "no query" message, which is a bit more "gentle".
+         */}
       {!hasQuery ? (
         <NoQuery />
       ) : validationErrors.length > 0 ? (

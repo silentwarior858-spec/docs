@@ -20,19 +20,50 @@ const fbvDir = path.join(rootDir, 'data/features')
 
 const languageCodes = Object.keys(languages)
 
-// Contributors use TODOCS as a placeholder; this test catches leftovers in Markdown and YAML.
+// This is a string that contributors can use in markdown and yaml files as a placeholder.
+// If any placeholders slip through, this test will flag them.
 const placeholder = 'TODOCS'
 const placeholderRegex = new RegExp(`\\b${placeholder}\\b`, 'gi')
 
-// Matches relative Markdown link targets, including definitions and space-before-target links.
-// Examples: "[Billing](billing/usage)" and "[Billing]: billing/usage".
-// Excludes anchors, root-relative paths, external URLs, tel/mailto URLs, and Liquid targets.
-// Examples: "[Email](mailto:docs@example.com)" and "[Phone](tel:555-0100)".
+// WARNING: Complicated RegExp below!
+//
+// Things matched by this RegExp:
+//  - [link text](link-url)
+//  - [link text] (link-url)
+//  - [link-definition-ref]: link-url
+//  - etc.
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [link text](#link-url)
+//  - [link text] (#link-url)
+//  - [link-definition-ref]: #link-url
+//  - [link text](/link-url)
+//  - [link-definition-ref]: /link-url
+//  - [link text](https://link-url)
+//  - [link-definition-ref]: https://link-url
+//  - [link text](mailto:mail-url)
+//  - [link-definition-ref]: mailto:mail-url
+//  - [link text](tel:phone-url)
+//  - [link-definition-ref]: tel:phone-url
+//  - [link text]({{ site.data.variables.product_url }})
+//  - [link-definition-ref]: {{ site.data.variables.product_url }}
+//  - [link text][link-definition-ref]: other text
+//  - [link text][link-definition-ref] (other text)
+//  - etc.
+//
 const relativeArticleLinkRegex =
   /(?=^|[^\]]\s*)\[[^\]]+\](?::\n?[ \t]+|\s*\()(?!\/|#|https?:\/\/|tel:|mailto:|\{[%{]\s*)[^)\s]+(?:(?:\s*[%}]\})?\)|\s+|$)/gm
 
-// Matches docs URLs with hard-coded language prefixes such as /en/github/overview.
-// Excludes external non-docs URLs such as https://nodejs.org/en/.
+// Things matched by this RegExp:
+//  - [link text](/en/github/blah)
+//  - [link text] (https://docs.github.com/ja/github/blah)
+//  - [link-definition-ref]: http://help.github.com/es/github/blah
+//  - etc.
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [Node.js](https://nodejs.org/en/)
+//  - etc.
+//
 const languageLinkRegex = new RegExp(
   `(?=^|[^\\]]\\s*)\\[[^\\]]+\\](?::\\n?[ \\t]+|\\s*\\()(?:(?:https?://(?:help|docs|developer)\\.github\\.com)?/(?:${languageCodes.join(
     '|',
@@ -40,36 +71,79 @@ const languageLinkRegex = new RegExp(
   'gm',
 )
 
-// Matches docs URLs with hard-coded Enterprise Server versions such as /enterprise/2.19/admin.
-// Excludes non-docs external URLs and current versioning paths under /github/site-policy/enterprise/.
+// Things matched by this RegExp:
+//  - [link text](/enterprise/2.19/admin/blah)
+//  - [link text] (https://docs.github.com/enterprise/11.10.340/admin/blah)
+//  - [link-definition-ref]: http://help.github.com/enterprise/2.8/admin/blah
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [link text](https://someservice.com/enterprise/1.0/blah)
+//  - [link text](/github/site-policy/enterprise/2.2/admin/blah)
 const versionLinkRegEx =
   /(?=^|[^\]]\s*)\[[^\]]+\](?::\n?[ \t]+|\s*\()(?:(?:https?:\/\/(?:help|docs|developer)\.github\.com)?\/enterprise\/\d+(\.\d+)+(?:\/[^)\s]*)?)(?:\)|\s+|$)/gm
 
-// Matches docs URLs that leak Early Access paths such as /early-access/github/overview.
-// Excludes external non-docs URLs such as https://nodejs.org/early-access/.
+// Things matched by this RegExp:
+//  - [link text](/early-access/github/blah)
+//  - [link text] (https://docs.github.com/early-access/github/blah)
+//  - [link-definition-ref]: http://help.github.com/early-access/github/blah
+//  - etc.
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [Node.js](https://nodejs.org/early-access/)
+//  - etc.
+//
 const earlyAccessLinkRegex =
   /(?=^|[^\]]\s*)\[[^\]]+\](?::\n?[ \t]+|\s*\()(?:(?:https?:\/\/(?:help|docs|developer)\.github\.com)?\/early-access(?:\/[^)\s]*)?)(?:\)|\s+|$)/gm
 
-// Matches hard-coded docs domains such as docs.github.com, help.github.com,
-// and developer.github.com.
-// Excludes root-relative links and developer.github.com/changes URLs.
+//  - [link text](https://docs.github.com/github/blah)
+//  - [link text] (https://help.github.com/github/blah)
+//  - [link-definition-ref]: http://developer.github.com/v3/
+//  - [link text](//docs.github.com)
+//  - etc.
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [link text](/github/blah)
+//  - [link text[(https://developer.github.com/changes/2018-02-22-protected-branches-required-signatures/)
+//  - etc.
+//
 const domainLinkRegex =
   /(?=^|[^\]]\s*)\[[^\]]+\](?::\n?[ \t]+|\s*\()(?:https?:)?\/\/(?:help|docs|developer)\.github\.com(?!\/changes\/)[^)\s]*(?:\)|\s+|$)/gm
 
-// Matches docs image links under /assets/images/early-access.
-// Excludes external non-docs URLs such as https://nodejs.org/assets/images/early-access/.
+// Things matched by this RegExp:
+//  - ![image text](/assets/images/early-access/github/blah.gif)
+//  - ![image text] (https://docs.github.com/assets/images/early-access/github/blah.gif)
+//  - [image-definition-ref]: http://help.github.com/assets/images/early-access/github/blah.gif
+//  - [link text](/assets/images/early-access/github/blah.gif)
+//  - etc.
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [Node.js](https://nodejs.org/assets/images/early-access/blah.gif)
+//  - etc.
+//
 const earlyAccessImageRegex =
   /(?=^|[^\]]\s*)\[[^\]]+\](?::\n?[ \t]+|\s*\()(?:(?:https?:\/\/(?:help|docs|developer)\.github\.com)?\/assets\/images\/early-access(?:\/[^)\s]*)?)(?:\)|\s+|$)/gm
 
-// Matches misplaced Early Access image paths, including /assets/early-access/images.
-// Excludes external non-docs URLs such as https://nodejs.org/assets/early-access/images/.
+// Things matched by this RegExp:
+//  - ![image text](/assets/early-access/images/github/blah.gif)
+//  - ![image text] (https://docs.github.com/images/early-access/github/blah.gif)
+//  - [image-definition-ref]: http://help.github.com/assets/early-access/github/blah.gif
+//  - [link text](/early-access/assets/images/github/blah.gif)
+//  - [link text](/early-access/images/github/blah.gif)
+//  - etc.
+//
+// Things intentionally NOT matched by this RegExp:
+//  - [Node.js](https://nodejs.org/assets/early-access/images/blah.gif)
+//  - etc.
+//
 const badEarlyAccessImageRegex =
   /(?=^|[^\]]\s*)\[[^\]]+\](?::\n?[ \t]+|\s*\()(?:(?:https?:\/\/(?:help|docs|developer)\.github\.com)?\/(?:(?:assets|images)\/early-access|early-access\/(?:assets|images))(?:\/[^)\s]*)?)(?:\)|\s+|$)/gm
 
-// Matches old site.data Liquid variables such as {{ site.data.example.pizza }}.
+// {{ site.data.example.pizza }}
 const oldVariableRegex = /{{\s*?site\.data\..*?}}/g
 
-// Matches old octicon Liquid variables such as {{ octicon-plus An example label }}.
+//  - {{ octicon-plus }}
+//  - {{ octicon-plus An example label }}
+//
 const oldOcticonRegex = /{{\s*?octicon-([a-z-]+)(\s[\w\s\d-]+)?\s*?}}/g
 const relativeArticleLinkErrorText = 'Found unexpected relative article links:'
 const languageLinkErrorText = 'Found article links with hard-coded language codes:'
@@ -84,28 +158,37 @@ const oldVariableErrorText =
 const oldOcticonErrorText =
   'Found octicon variables with the old {{ octicon-name }} syntax. Use {% octicon "name" %} instead!'
 
+// Also test the "data/variables/" YAML files
+
 const yamlWalkOptions = {
   globs: ['**/*.yml'],
   directories: false,
   includeBasePath: true,
 }
 
+// different lint rules apply to different content types
 let ymlToLint
 
+// compile lists of all the files we want to lint
+
+// data/variables
 const variableYamlAbsPaths = walk(variablesDir, yamlWalkOptions).sort()
 const variableYamlRelPaths = variableYamlAbsPaths.map((p) => slash(path.relative(rootDir, p)))
 const variableYamlTuples = zip(variableYamlRelPaths, variableYamlAbsPaths)
 
+// data/glossaries
 const glossariesYamlAbsPaths = walk(glossariesDir, yamlWalkOptions).sort()
 const glossariesYamlRelPaths = glossariesYamlAbsPaths.map((p) => slash(path.relative(rootDir, p)))
 const glossariesYamlTuples = zip(glossariesYamlRelPaths, glossariesYamlAbsPaths)
 
+// data/features (feature-based versioning)
 const FbvYamlAbsPaths = walk(fbvDir, yamlWalkOptions).sort()
 const FbvYamlRelPaths = FbvYamlAbsPaths.map((p) => slash(path.relative(rootDir, p)))
 const fbvTuples = zip(FbvYamlRelPaths, FbvYamlAbsPaths)
 
+// Put all the yaml files together
 ymlToLint = ([] as Array<[string | undefined, string | undefined]>).concat(
-  variableYamlTuples,
+  variableYamlTuples, // These "tuples" not tested independently; they are only tested as part of ymlToLint.
   glossariesYamlTuples,
   fbvTuples,
 )
@@ -114,7 +197,9 @@ function formatLinkError(message: string, links: string[]) {
   return `${message}\n  - ${links.join('\n  - ')}`
 }
 
-// Glossary YAML stores text directly or under a description key.
+// Returns `content` if its a string, or `content.description` if it can.
+// Used for getting the nested `description` key in glossary files.
+// Using any because content can be string | { description: string } | other YAML structures
 function getContent(content: unknown) {
   if (typeof content === 'string') return content
   if (
@@ -129,11 +214,15 @@ function getContent(content: unknown) {
 
 const diffFiles = getDiffFiles()
 
-// DIFF_FILES or DIFF_FILE narrows YAML linting to the listed files.
+// If present, and not empty, leverage it because in most cases it's empty.
 if (diffFiles.length > 0) {
-  // Reuse a Set because every YAML tuple checks both relative and absolute paths.
+  // It's faster to do this once and then re-use over and over in the
+  // .filter() later on.
   const only = new Set(
-    // Strip quotes from CI tokens such as "foo" "bar"; filenames with spaces are unsupported.
+    // If the environment variable encodes all the names
+    // with quotation marks, strip them.
+    // E.g. Turn `"foo" "bar"` into ['foo', 'bar']
+    // Note, this assumes no possible file contains a space.
     diffFiles.map((name) => {
       if (/^['"]/.test(name) && /['"]$/.test(name)) {
         return name.slice(1, -1)
@@ -150,7 +239,7 @@ if (diffFiles.length > 0) {
 }
 
 if (ymlToLint.length === 0) {
-  // Keep Vitest happy when diff filtering leaves no YAML files.
+  // This is to make sure the file has at least once `describe`.
   describe('deliberately do nothing', () => {
     test('void', () => {})
   })
@@ -160,11 +249,12 @@ if (ymlToLint.length === 0) {
     describe.each(ymlToLint)(
       '%s',
       (yamlRelPath: string | undefined, yamlAbsPath: string | undefined) => {
-        // YAML structure varies by variables, glossaries, and features files.
-        let dictionary: unknown
+        let dictionary: unknown // YAML structure varies by file type (variables, glossaries, features)
         let isEarlyAccess: boolean
         let fileContents: string
-        // Use false as the parse sentinel because null and undefined are valid YAML values.
+        // This variable is used to determine if the file was parsed successfully.
+        // When `load()` fails to parse the file, it is overwritten with the error message.
+        // `false` is intentionally chosen since `null` and `undefined` are valid return values.
         let dictionaryError: unknown = false
 
         beforeAll(async () => {
@@ -207,7 +297,7 @@ if (ymlToLint.length === 0) {
         })
 
         test('must not leak Early Access doc URLs', async () => {
-          // Early Access docs can link to Early Access docs.
+          // Only execute for docs that are NOT Early Access
           if (!isEarlyAccess) {
             const matches = []
 
@@ -226,7 +316,7 @@ if (ymlToLint.length === 0) {
         })
 
         test('must not leak Early Access image URLs', async () => {
-          // Early Access docs can link to Early Access images.
+          // Only execute for docs that are NOT Early Access
           if (!isEarlyAccess) {
             const matches = []
 
@@ -245,7 +335,8 @@ if (ymlToLint.length === 0) {
         })
 
         test('must have correctly formatted Early Access image URLs', async () => {
-          // Check all YAML files because non-Early-Access docs can leak bad image paths.
+          // Execute for ALL docs (not just Early Access) to ensure non-EA docs
+          // are not leaking incorrectly formatted EA image URLs
           const matches = []
 
           for (const [key, content] of Object.entries(dictionary as Record<string, unknown>)) {

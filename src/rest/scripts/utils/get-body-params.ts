@@ -32,11 +32,13 @@ interface BodyParamProps {
   childParamsGroups?: TransformedParam[]
 }
 
-// Docs cannot display multiple input parameter sets for top-level oneOf.
-// getTopLevelOneOfProperty uses the first option. The Add status check contexts
-// and Set status check contexts operations need this.
-// When every top-level oneOf option is an object, getTopLevelOneOfProperty merges
-// all properties. With three or more options, middle required fields can lose required flags.
+// If there is a oneOf at the top level, then we have to present just one
+// in the docs. We don't currently have a convention for showing more than one
+// set of input parameters in the docs. Having a top-level oneOf is also very
+// uncommon.
+// Currently there aren't very many operations that require this treatment.
+// As an example, the 'Add status check contexts' and 'Set status check contexts'
+// operations have a top-level oneOf.
 async function getTopLevelOneOfProperty(
   schema: Schema,
 ): Promise<{ properties: Record<string, Schema>; required: string[] }> {
@@ -47,27 +49,34 @@ async function getTopLevelOneOfProperty(
     throw new Error('Schema requestBody oneOf property is not an array')
   }
 
-  // When oneOf types differ, the first option must be the comprehensive object form.
+  // When a oneOf exists but the `type` differs, the case has historically
+  // been that the alternate option is an array, where the first option
+  // is the array as a property of the object. We need to ensure that the
+  // first option listed is the most comprehensive and preferred option.
   const firstOneOfObject = schema.oneOf[0]
   const allOneOfAreObjects = schema.oneOf.every((elem) => elem.type === 'object')
   let required = firstOneOfObject.required || []
   let properties = firstOneOfObject.properties || {}
 
+  // When all of the oneOf objects have the `type: object` we
+  // need to display all of the parameters.
+  // This merges all of the properties and required values.
   if (allOneOfAreObjects) {
-    required = []
-    properties = {}
-    for (const each of schema.oneOf) {
-      if (each.properties) {
-        Object.assign(properties, each.properties)
+    for (const each of schema.oneOf.slice(1)) {
+      if (firstOneOfObject.properties && each.properties) {
+        Object.assign(firstOneOfObject.properties, each.properties)
       }
-      if (each.required) {
-        required = required.concat(each.required)
+      if (firstOneOfObject.required && each.required) {
+        required = firstOneOfObject.required.concat(each.required)
       }
     }
+    properties = firstOneOfObject.properties || {}
   }
   return { properties, required }
 }
 
+// Gets the body parameters for a given schema recursively.
+// Helper function to handle oneOf fields where all items are objects
 async function handleObjectOnlyOneOf(
   param: Schema,
   paramType: string[],
@@ -80,19 +89,14 @@ async function handleObjectOnlyOneOf(
   return []
 }
 
-// OpenAPI 3.0 allows one type value, while OpenAPI 3.1 also allows an array, so getBodyParams
-// normalizes type values to arrays before it builds the rendered type string.
-// For child parameters, getBodyParams reads object-valued additionalProperties recursively.
-// The Create a snapshot of dependencies for a repository and Update a gist operations need
-// that dictionary shape. Object-only oneOf alternatives also recurse into child parameters,
-// while mixed oneOf adds types and descriptions without creating child parameter groups.
 export async function getBodyParams(schema: Schema, topLevel = false): Promise<TransformedParam[]> {
   const bodyParametersParsed: TransformedParam[] = []
   const schemaObject = schema.oneOf && topLevel ? await getTopLevelOneOfProperty(schema) : schema
   const properties = schemaObject.properties || {}
   const required = schemaObject.required || []
 
-  // Top-level array schemas have no properties on the schema object.
+  // Most operation requestBody schemas are objects. When the type is an array,
+  // there will not be properties on the `schema` object.
   if (topLevel && schema.type === 'array') {
     const childParamsGroups: TransformedParam[] = []
     if (!schema.items) {
@@ -113,6 +117,11 @@ export async function getBodyParams(schema: Schema, topLevel = false): Promise<T
   }
 
   for (const [paramKey, param] of Object.entries(properties)) {
+    // OpenAPI 3.0 only had a single value for `type`. OpenAPI 3.1
+    // will either be a single value or an array of values.
+    // This makes type an array regardless of how many values the array
+    // includes. This allows us to support 3.1 while remaining backwards
+    // compatible with 3.0.
     const paramType = (Array.isArray(param.type) ? param.type : [param.type]).filter(
       (t): t is string => t !== undefined,
     )
@@ -124,6 +133,15 @@ export async function getBodyParams(schema: Schema, topLevel = false): Promise<T
       : []
     const childParamsGroups: TransformedParam[] = []
 
+    // If the parameter is an array or object there may be child params
+    // If the parameter has oneOf or additionalProperties, they need to be
+    // recursively read too.
+
+    // There are a couple operations with additionalProperties, which allows
+    // the api to define input parameters with the type dictionary. These are the only
+    // two operations (at the time of adding this code) that use additionalProperties
+    // Create a snapshot of dependencies for a repository
+    // Update a gist
     if (param.additionalProperties && additionalPropertiesType.includes('object')) {
       const keyParam: TransformedParam = {
         type: 'object',
@@ -170,10 +188,12 @@ export async function getBodyParams(schema: Schema, topLevel = false): Promise<T
         childParamsGroups.push(...(await getBodyParams(param, false)))
       }
     } else if (param.oneOf) {
+      // Check if all oneOf items are objects - if so, treat this as a oneOfObject case
       const oneOfChildren = await handleObjectOnlyOneOf(param as Schema, paramType)
       if (oneOfChildren.length > 0) {
         childParamsGroups.push(...oneOfChildren)
       } else {
+        // Handle mixed types or non-object oneOf cases
         const descriptions: { type: string; description: string }[] = []
         for (const childParam of param.oneOf) {
           paramType.push(
@@ -206,12 +226,17 @@ export async function getBodyParams(schema: Schema, topLevel = false): Promise<T
             })
           }
         }
-        // A oneOf with no parent description borrows the first collected child description.
+        // Occasionally, there is no parent description and the description
+        // is in the first child parameter.
         const oneOfDescriptions = descriptions.length ? descriptions[0].description : ''
         if (!param.description) param.description = oneOfDescriptions
       }
 
-      // Pages source incorrectly declares anyOf; object entry adds child params and preserves null.
+      // This is a workaround for an operation that incorrectly defines anyOf
+      // for a body parameter. We use the first object in the list of the anyOf array.
+      // There is currently only one occurrence for the operation id
+      // repos/update-information-about-pages-site. See Ecosystem API issue
+      // number #3332 for future plans to fix this in the OpenAPI
     } else if (param.anyOf && Object.keys(param).length === 1) {
       const firstObject = Object.values(param.anyOf).find(
         (item) => (item as Schema).type === 'object',
@@ -226,7 +251,7 @@ export async function getBodyParams(schema: Schema, topLevel = false): Promise<T
         paramType.push(param.anyOf[0].type as string)
         param.description = param.anyOf[0].description
       }
-      // Webhooks combine body parameter groups with allOf.
+      // Used only for webhooks handling allOf
     } else if (param.allOf) {
       for (const prop of param.allOf) {
         paramType.push('object')
@@ -251,7 +276,9 @@ async function getTransformedParam(
 ): Promise<TransformedParam> {
   const { paramKey, required, childParamsGroups } = props
   const paramDecorated: TransformedParam = {} as TransformedParam
-  // OpenAPI 3.0 stores nullable separately from OpenAPI 3.1 type arrays.
+  // Supports backwards compatibility for OpenAPI 3.0
+  // In 3.1 a nullable type is part of the param.type array and
+  // the property param.nullable does not exist.
   if (param.nullable) paramType.push('null')
   paramDecorated.type = Array.from(new Set(paramType.filter(Boolean))).join(' or ')
   paramDecorated.name = paramKey || ''
@@ -260,7 +287,8 @@ async function getTransformedParam(
     paramDecorated.isRequired = true
   }
   if (childParamsGroups && childParamsGroups.length > 0 && !param.oneOfObject) {
-    // Drop duplicate allOf child params by name, preferring required entries.
+    // Since the allOf properties can have multiple duplicate properties we want to get rid of the duplicates with the same name, but keep the
+    // the one that has isRequired set to true.
     const mergedChildParamsGroups = Array.from(
       childParamsGroups
         .reduce((childParam, obj) => {

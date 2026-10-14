@@ -81,10 +81,12 @@ export function resolveRequestedVersions(optionValue?: string): string[] {
 }
 
 async function main(languageCodes: string[], options: { versions?: string } = {}) {
-  // Validate requested versions before suppressing console output, so errors stay visible.
+  // Resolve and validate the versions to render under before suppressing
+  // console output, so validation errors are visible.
   const versions = resolveRequestedVersions(options.versions)
 
-  // Capture warmServer frontmatter noise as structured data instead of stderr.
+  // Suppress warmServer noise (frontmatter errors from translations)
+  // and capture them as structured data instead
   const originalError = console.error
   const originalWarn = console.warn
   const originalLog = console.log
@@ -171,10 +173,12 @@ function getReusables(): Reusables {
 }
 
 // Build a minimal Liquid render context for validating translated content.
-// ifversion needs currentVersionObj; data tags call getDataByLanguage internally.
-// Mirror shortVersions middleware so bare conditionals such as {% ifversion ghes %} resolve.
-// Without the short-name flag, Liquid sees an undefined variable and hides real corruptions.
+// ifversion needs currentVersionObj; data tags call getDataByLanguage() internally.
 function buildRenderContext(languageCode: string, version: string) {
+  // Mirror what the shortVersions middleware adds to the request context so
+  // bare conditionals like {% ifversion ghes %} resolve correctly. Without the
+  // short-name flag, the native Liquid `if` sees an undefined variable and the
+  // branch silently evaluates false, hiding real corruptions.
   const currentVersionObj = allVersions[version]
   return {
     currentLanguage: languageCode,
@@ -197,10 +201,13 @@ async function run(
   const wheres = new Map<string, number>()
   const illegalTags = new Map<string, number>()
 
-  // Dedupe by file, location, and error, then annotate the entry with every version.
+  // Dedupe corruptions by file + location + error so the same broken Liquid
+  // rendered under multiple versions is a single entry annotated with every
+  // version it surfaced under (rather than N near-duplicate entries).
   const byKey = new Map<string, CorruptionEntry & { versionSet: Set<string> }>()
 
-  // Discard direct console.warn calls during rendering.
+  // Suppress console.warn during rendering — the {% data %} tag warns
+  // when it can't find translated data, which is expected noise.
   const originalWarn = console.warn
   console.warn = () => {}
 
@@ -235,7 +242,9 @@ async function run(
     for (const page of site.pageList) {
       if (page.languageCode !== languageCode) continue
 
-      // Render only served versions, because other corruptions cannot break indexing.
+      // Only render under versions the page is actually served in (intersected
+      // with the requested set) — a page is never scraped under a version it
+      // doesn't apply to, so corruptions there can't break indexing.
       const pageVersions = versions.filter((v) => page.applicableVersions.includes(v))
       if (!pageVersions.length) continue
 
@@ -271,7 +280,10 @@ async function run(
           relativePath,
         })
       } catch (error) {
-        // Missing reusables are untranslated; other read or correction errors are corruptions.
+        // A missing translated file (ENOENT) just means this language hasn't
+        // translated this reusable yet — skip it silently. Any other error (e.g.
+        // a malformed reusable that breaks correctTranslatedContentStrings) is a
+        // real corruption: record it and keep going rather than crashing the run.
         if (error instanceof Error) {
           if (!error.message.startsWith('ENOENT')) {
             countError(error, 'reusable', relativePath, versions[0])

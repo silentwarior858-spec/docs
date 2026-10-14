@@ -4,14 +4,17 @@ import { EXPERIMENTS } from '@/events/components/experiments/experiments'
 
 const EXPERIMENT_KEY = EXPERIMENTS.readability_copilot.key
 
-// Both .exp-control and .exp-treatment divs render server-side and Fastly caches them.
-// The experiment group swaps visibility after load, so authored .exp-treatment divs need
-// hidden for the control fallback and data-nosnippet so crawlers ignore treatment text.
+// Swaps visibility of .exp-control / .exp-treatment divs within the article
+// body based on the user's experiment group. Both variants are rendered
+// server-side (and cached by Fastly). Treatment divs must have the `hidden`
+// and `data-nosnippet` attributes in the authored HTML so control content is
+// always the safe fallback and crawlers ignore the treatment variant.
 export function ExperimentContentSwap({ containerRef }: { containerRef: string }) {
   const [hasExperimentDivs, setHasExperimentDivs] = useState(false)
 
+  // Check once on mount whether this page has any experiment markup.
+  // If not, skip the experiment hook entirely to avoid unnecessary work.
   useLayoutEffect(() => {
-    // Skip the experiment hook on pages without experiment markup to avoid unnecessary work.
     const container = document.querySelector(containerRef)
     if (container?.querySelector(`[data-experiment="${EXPERIMENT_KEY}"]`)) {
       setHasExperimentDivs(true)
@@ -23,14 +26,16 @@ export function ExperimentContentSwap({ containerRef }: { containerRef: string }
   return <ExperimentSwapper containerRef={containerRef} />
 }
 
-// ExperimentSwapper isolates the experiment hook from pages without experiment divs.
+// Separated so the experiment hook only runs when experiment divs are present.
 function ExperimentSwapper({ containerRef }: { containerRef: string }) {
   const { showExperiment, experimentLoading } = useShouldShowExperiment(
     EXPERIMENTS.readability_copilot,
   )
 
+  // useLayoutEffect fires synchronously after DOM mutations but before
+  // the browser paints, minimizing the flash of control content for
+  // treatment users.
   useLayoutEffect(() => {
-    // Visibility updates before paint reduce flashes of control content for treatment users.
     if (experimentLoading) return
 
     const container = document.querySelector(containerRef)

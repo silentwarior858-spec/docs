@@ -21,7 +21,7 @@ describe('no-dangerously-set-inner-html', () => {
         { code: `const el = <RenderedHTML as="div" html={html} />` },
         { code: `const el = <MarkdownContent hast={hast} />` },
         { code: `const props = { className: 'x', children: nodes }` },
-        // Destructuring strips the prop, so the rule leaves it alone.
+        // Destructuring that strips the prop is safe and must not be flagged.
         { code: `const { dangerouslySetInnerHTML, ...safeProps } = props` },
       ],
       invalid: [],
@@ -48,6 +48,7 @@ describe('no-dangerously-set-inner-html', () => {
           code: `const childProps = { dangerouslySetInnerHTML: { __html: children } }`,
           errors: [{ messageId: 'noDanger' }],
         },
+        // String-literal key form must also be flagged.
         {
           code: `const childProps = { 'dangerouslySetInnerHTML': { __html: children } }`,
           errors: [{ messageId: 'noDanger' }],
@@ -64,7 +65,7 @@ describe('no-dangerously-set-inner-html', () => {
           code: `props.dangerouslySetInnerHTML = { __html: html }`,
           errors: [{ messageId: 'noDanger' }],
         },
-        // Computed string-key assignment bypasses JSX-attribute checks, so the rule flags it.
+        // Computed string-key assignment is a trivial bypass and must be flagged.
         {
           code: `props['dangerouslySetInnerHTML'] = { __html: html }`,
           errors: [{ messageId: 'noDanger' }],

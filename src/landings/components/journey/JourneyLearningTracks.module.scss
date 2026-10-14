@@ -1,4 +1,4 @@
-// Multi-track journeys use numbered badges connected by a vertical rail.
+/* Multi-track journey: a vertical rail of numbered badges with a disclosure card per track. */
 .tracks {
   display: flex;
   flex-direction: column;
@@ -7,7 +7,8 @@
   padding: 0;
 }
 
-// Each badge sits 12px inside the card edge, so connectors run through card gaps.
+/* Each track: a numbered badge sitting above the card, with a connector line
+   running through the gaps between cards (badge x is 12px inside the card edge). */
 .trackItem {
   display: flex;
   flex-direction: column;
@@ -22,19 +23,25 @@
   height: 24px;
   padding: 0 0.5rem;
   border-radius: 999px;
-  background-color: var(--brand-color-neutral-muted);
-  color: var(--brand-color-text-default);
+  background-color: var(
+    --bgColor-neutral-muted,
+    var(--color-neutral-muted, #d2d9d4)
+  );
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
   font-family: var(--brand-fontStack-monospace, "Mona Sans Mono", monospace);
   font-size: 14px;
   line-height: 1.5;
 }
 
-// A 24px badge centers at 12px, so an 11px margin centers the 1px connector.
+/* Connector segments are centered under the badge (badge is 24px wide → center at 12px). */
 .connectorAbove,
 .connectorBelow {
   width: 1px;
   margin-left: 11px;
-  background-color: var(--brand-color-border-default);
+  background-color: var(
+    --borderColor-default,
+    var(--color-border-default, #d2d9d4)
+  );
 }
 
 .connectorAbove {
@@ -48,15 +55,16 @@
 .trackCard {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--brand-color-border-default);
+  border: 1px solid
+    var(--borderColor-default, var(--color-border-default, #d2d9d4));
   border-radius: 8px;
-  background-color: var(--brand-color-canvas-subtle);
+  background-color: var(--bgColor-muted, var(--color-canvas-subtle, #fafafa));
   overflow: hidden;
   transition:
     box-shadow 0.2s ease-in-out,
     transform 0.2s ease-in-out;
 
-  // Hover lift applies only while collapsed.
+  // hover lift only while collapsed
   &:not([open]):hover {
     box-shadow:
       0 0.25rem 0.5rem 0 rgba(31, 35, 40, 0.12),
@@ -100,7 +108,7 @@
   font-size: 16px;
   line-height: 1.5;
   letter-spacing: 0.16px;
-  color: var(--brand-color-text-default);
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
 }
 
 .articlesPill {
@@ -109,8 +117,11 @@
   flex-shrink: 0;
   padding: 1px 7px;
   border-radius: 100px;
-  background-color: var(--brand-color-neutral-muted);
-  color: var(--brand-color-text-default);
+  background-color: var(
+    --bgColor-neutral-muted,
+    var(--color-neutral-muted, #f2f5f3)
+  );
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
   font-size: 12px;
   font-weight: 500;
   line-height: 1.5;
@@ -119,7 +130,7 @@
 
 .chevron {
   flex-shrink: 0;
-  color: var(--brand-color-text-muted);
+  color: var(--fgColor-muted, var(--color-fg-muted, #58635b));
   transition: transform 0.2s ease-in-out;
 }
 
@@ -128,7 +139,7 @@
   font-size: 14px;
   line-height: 1.5;
   letter-spacing: 0.14px;
-  color: var(--brand-color-text-muted);
+  color: var(--fgColor-muted, var(--color-fg-muted, #58635b));
 }
 
 .trackGuides {
@@ -146,7 +157,8 @@
   padding: 6px 0;
 }
 
-// Single-track pages have no surrounding card, so the list sits flush with the heading.
+/* Single-track pages render the list without a surrounding card, so it must sit
+   flush with the heading rather than inside the card's 24px inset. */
 .trackGuidesFlush {
   padding: 0;
 }
@@ -160,8 +172,11 @@
   height: 24px;
   padding: 0 0.5rem;
   border-radius: 4px;
-  background-color: var(--brand-color-neutral-muted);
-  color: var(--brand-color-text-default);
+  background-color: var(
+    --bgColor-neutral-muted,
+    var(--color-neutral-muted, #e4ebe6)
+  );
+  color: var(--fgColor-default, var(--color-fg-default, #1f2328));
   font-family: var(--brand-fontStack-monospace, "Mona Sans Mono", monospace);
   font-size: 14px;
   line-height: 1.5;
@@ -171,14 +186,14 @@
   font-size: 16px;
   font-weight: 500;
   line-height: 1.5;
-  color: var(--brand-color-text-link-rest);
+  color: var(--fgColor-accent, var(--color-accent-fg, #005dd5));
 }
 
 .singleTrackHeading {
   margin: 0 0 1rem 0;
 }
 
-// Narrow viewports stack the title and article count pill.
+/* Stack the title and its "N articles" pill on narrow viewports. */
 @media (max-width: 767px) {
   .trackTitleGroup {
     flex-direction: column;

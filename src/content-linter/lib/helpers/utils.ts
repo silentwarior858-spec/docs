@@ -3,14 +3,15 @@ import matter from '@gr2m/gray-matter'
 
 import type { RuleParams, RuleErrorCallback, MarkdownToken } from '@/content-linter/types'
 
+// Adds an error object with details conditionally via the onError callback
 export function addFixErrorDetail(
   onError: RuleErrorCallback,
   lineNumber: number,
   expected: string,
   actual: string,
-  // Accept the range shapes emitted by different linting rules.
+  // Using flexible type to accommodate different range formats from various linting rules
   range: [number, number] | number[] | null,
-  // markdownlint-rule-helpers accepts several fix info shapes.
+  // Using unknown for fixInfo as markdownlint-rule-helpers accepts various fix info structures
   fixInfo: unknown,
 ): void {
   addError(onError, lineNumber, `Expected: ${expected}`, ` Actual: ${actual}`, range, fixInfo)
@@ -30,7 +31,8 @@ export function forEachInlineChild<T = MarkdownToken>(
 
 export function getRange(line: string, content: string): [number, number] | null {
   if (content.length === 0) {
-    // Empty content cannot produce a valid markdownlint range.
+    // This function assumes that the content is something. If it's an
+    // empty string it can never produce a valid range.
     throw new Error('invalid content (empty)')
   }
   const startColumnIndex = line.indexOf(content)
@@ -38,17 +40,28 @@ export function getRange(line: string, content: string): [number, number] | null
 }
 
 export function isStringQuoted(text: string): boolean {
-  // Match quotes around the full string, with optional ? or ! outside the quote.
+  // String starts with either a single or double quote
+  // ends with either a single or double quote
+  // and optionally ends with a question mark or exclamation point
+  // because that punctuation can exist outside of the quoted string
   return /^['"].*['"][?!]?$/.test(text)
 }
 
 export function isStringPunctuated(text: string): boolean {
-  // Match sentence punctuation with an optional closing quote.
+  // String ends with punctuation of either
+  // . ? ! and optionally ends with single
+  // or double quotes. This also allows
+  // for single or double quotes before
+  // the punctuation.
   return /^.*[.?!]['"]?$/.test(text)
 }
 
 export function doesStringEndWithPeriod(text: string): boolean {
-  // String ends with a period, optionally followed by a single or double quote.
+  // String ends with punctuation of either
+  // . ? ! and optionally ends with single
+  // or double quotes. This also allows
+  // for single or double quotes before
+  // the punctuation.
   return /^.*\.['"]?$/.test(text)
 }
 
@@ -57,11 +70,17 @@ export function quotePrecedesLinkOpen(text: string | undefined): boolean {
   return text.endsWith('"') || text.endsWith("'")
 }
 
-// markdownlint passes files as line arrays, and gray-matter needs a string.
+// Lines is an array of strings read from a
+// Markdown file a split around new lines.
+// This is the format we get from Markdownlint.
+// Returns null if the lines do not contain
+// frontmatter properties.
+// Returns frontmatter as a Record with unknown values since YAML can contain various types
 export function getFrontmatter(lines: string[]): Record<string, unknown> | null {
   const fmString = lines.join('\n')
   const { data } = matter(fmString)
-  // gray-matter returns an empty object when frontmatter is absent or empty.
+  // If there is no frontmatter or the frontmatter contains
+  // no keys, matter will return an empty object.
   if (Object.keys(data).length === 0) return null
   return data
 }

@@ -21,13 +21,15 @@ interface ErrorResponse {
 
 describe('pageinfo api', () => {
   beforeAll(() => {
-    // Warn early because missing fixture roots otherwise fail with unclear errors.
+    // If you didn't set the `ROOT` variable, the tests will fail rather
+    // cryptically. So as a warning for engineers running these tests,
+    // alert in case it was accidentally forgotten.
     if (!process.env.ROOT) {
       console.warn(
         'WARNING: The pageinfo tests require the ROOT environment variable to be set to the fixture root',
       )
     }
-    // Fixture translations need their own root.
+    // Ditto for fixture-based translations to work
     if (!process.env.TRANSLATIONS_FIXTURE_ROOT) {
       console.warn(
         'WARNING: The pageinfo tests require the TRANSLATIONS_FIXTURE_ROOT environment variable to be set',
@@ -45,7 +47,9 @@ describe('pageinfo api', () => {
       'Get started using HubGit to manage Git repositories and collaborate with others.',
     )
     expect(meta.documentType).toBe('category')
+    // Canonical URLs should not have redirectedFrom
     expect(meta.redirectedFrom).toBeUndefined()
+    // Check that it can be cached at the CDN
     expect(res.headers['set-cookie']).toBeUndefined()
     expect(res.headers['cache-control']).toContain('public')
     expect(res.headers['cache-control']).toMatch(/max-age=[1-9]/)
@@ -54,8 +58,13 @@ describe('pageinfo api', () => {
     expect(res.headers['surrogate-key']).toBe(makeLanguageSurrogateKey('en'))
   })
 
-  // Fullwidth colons make Japanese frontmatter scalar; English fallback prevents empty titles.
   test('corrupted translation frontmatter falls back to English title', async () => {
+    // The Japanese counterpart of this page has frontmatter whose ASCII `:`
+    // key/value separators were replaced with fullwidth colons (`：`), so the
+    // YAML parses to a scalar string rather than an object. When that happens
+    // none of the frontmatter keys exist. Without the non-object fallback in
+    // page-data, `meta.title` comes back empty and the search scraper rejects
+    // the record with "Record has empty title". It must fall back to English.
     const res = await get(makeURL('/ja/get-started/foo/broken-frontmatter-translation'))
     expect(res.statusCode).toBe(200)
     const meta = JSON.parse(res.body) as PageMetadata
@@ -91,7 +100,7 @@ describe('pageinfo api', () => {
   })
 
   test('redirects correct the URL', async () => {
-    // redirect_from entries set redirectedFrom to the normalized lookup path.
+    // Regular redirect from `redirect_from`
     {
       const res = await get(makeURL('/en/olden-days'))
       expect(res.statusCode).toBe(200)
@@ -99,7 +108,7 @@ describe('pageinfo api', () => {
       expect(meta.title).toBe('HubGit.com Fixture Documentation')
       expect(meta.redirectedFrom).toBe('/en/olden-days')
     }
-    // Redirect lookups normalize trailing slashes.
+    // Trailing slashes are always removed
     {
       const res = await get(makeURL('/en/olden-days/'))
       expect(res.statusCode).toBe(200)
@@ -107,14 +116,14 @@ describe('pageinfo api', () => {
       expect(meta.title).toBe('HubGit.com Fixture Documentation')
       expect(meta.redirectedFrom).toBe('/en/olden-days')
     }
-    // Short code for the latest version.
+    // Short code for latest version
     {
       const res = await get(makeURL('/en/enterprise-server@latest/get-started/liquid/ifversion'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.intro).toMatch(/\(not on fpt\)/)
     }
-    // Pages unavailable on FPT redirect to an available product version.
+    // A URL that doesn't have fpt as an available version
     {
       const res = await get(makeURL('/en/get-started/versioning/only-ghec-and-ghes'))
       expect(res.statusCode).toBe(200)
@@ -124,14 +133,16 @@ describe('pageinfo api', () => {
   })
 
   test('a page that uses non-trivial Liquid to render', async () => {
-    // The intro uses ifversion logic that changes between FPT and GHES.
+    // This page uses `{% ifversion not fpt %}` in the intro.
 
+    // First on the fpt version
     {
       const res = await get(makeURL('/en/get-started/liquid/ifversion'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.intro).toMatch(/\(on fpt\)/)
     }
+    // Second on any other version
     {
       const res = await get(makeURL('/en/enterprise-server@latest/get-started/liquid/ifversion'))
       expect(res.statusCode).toBe(200)
@@ -141,13 +152,19 @@ describe('pageinfo api', () => {
   })
 
   test('home pages', async () => {
+    // The home page with language specified
     {
       const res = await get(makeURL('/en'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.title).toMatch('HubGit.com Fixture Documentation')
     }
-    // Page lookup must happen before redirect lookup for localized enterprise home pages.
+    // enterprise-server with language specified
+    // This is important because it tests that we check for a page
+    // before we bothering to see if it can be a redirect.
+    // That's how our middleware and Next router works. First we look
+    // for a page, if it can't be found, then we check if it's a redirect.
+    // This test proves something that caused a bug in production.
     {
       const res = await get(makeURL(`/en/enterprise-server@${latest}`))
       expect(res.statusCode).toBe(200)
@@ -157,12 +174,14 @@ describe('pageinfo api', () => {
   })
 
   test('home pages (with redirects)', async () => {
+    // The home page for the default language *not* specified
     {
       const res = await get(makeURL('/'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.title).toMatch('HubGit.com Fixture Documentation')
     }
+    // enterprise-server without language specified
     {
       const res = await get(makeURL('/enterprise-server@latest'))
       expect(res.statusCode).toBe(200)
@@ -172,30 +191,35 @@ describe('pageinfo api', () => {
   })
 
   test('documentType for different page types', async () => {
+    // Homepage
     {
       const res = await get(makeURL('/en'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.documentType).toBe('homepage')
     }
+    // Product
     {
       const res = await get(makeURL('/en/get-started'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.documentType).toBe('product')
     }
+    // Category
     {
       const res = await get(makeURL('/en/get-started/start-your-journey'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.documentType).toBe('category')
     }
+    // Subcategory
     {
       const res = await get(makeURL('/en/actions/category/subcategory'))
       expect(res.statusCode).toBe(200)
       const meta = JSON.parse(res.body) as PageMetadata
       expect(meta.documentType).toBe('subcategory')
     }
+    // Article
     {
       const res = await get(makeURL('/en/get-started/start-your-journey/hello-world'))
       expect(res.statusCode).toBe(200)
@@ -205,8 +229,12 @@ describe('pageinfo api', () => {
   })
 
   test('archived enterprise versions', async () => {
-    // Archived versions outside the page tree still get fabricated pageinfo titles.
+    // For example /en/enterprise-server@3.8 is a valid Page in the
+    // site tree, but /en/enterprise-server@2.6 is not. Yet we can
+    // 200 OK and serve content for that. This needs to be reflected in
+    // page info too. Even if we have to "fabricate" the title a bit.
 
+    // At the time of writing, the latest archived version
     {
       const res = await get(makeURL('/en/enterprise-server@3.2'))
       expect(res.statusCode).toBe(200)
@@ -215,7 +243,7 @@ describe('pageinfo api', () => {
       expect(meta.documentType).toBeNull()
     }
 
-    // Very old enterprise URLs use the legacy /enterprise version path.
+    // The oldest known archived version that we proxy
     {
       const res = await get(makeURL('/en/enterprise/11.10.340'))
       expect(res.statusCode).toBe(200)
@@ -251,7 +279,8 @@ describe('pageinfo api', () => {
     test('falls back to English if translation is not present', async () => {
       const enRes = await get(makeURL('/en/get-started/start-your-journey'))
       expect(enRes.statusCode).toBe(200)
-      // Missing translation files fall back to English.
+      // This page doesn't have a Japanese translation. I.e. it doesn't
+      // even exist on disk. So it'll fall back to English.
       const translationRes = await get(makeURL('/ja/get-started/start-your-journey'))
       expect(translationRes.statusCode).toBe(200)
       const en = JSON.parse(enRes.body) as PageMetadata

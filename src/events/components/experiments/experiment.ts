@@ -20,27 +20,32 @@ export function shouldShowExperiment(
   isStaff: boolean,
   routerQuery: ParsedUrlQuery,
 ) {
+  // Accept either EXPERIMENTS.<experiment_key> or EXPERIMENTS.<experiment_key>.key
   if (typeof experimentKey === 'object') {
     experimentKey = experimentKey.key
   }
 
+  // Determine if user is in treatment group. If they are, show the experiment
   const experiments = getActiveExperiments('all')
   for (const experiment of experiments) {
     if (experiment.key === experimentKey) {
-      // getActiveExperiments('all') includes inactive experiments, so isActive=false stops them.
+      // Respect isActive so flipping it to false actually stops the experiment
       if (!experiment.isActive) return false
+      // If there is an override for the current session, use that
       if (controlGroupOverride[experiment.key]) {
         const controlGroup = getExperimentControlGroupFromSession(
           experimentKey,
           experiment.percentOfUsersToGetExperiment,
         )
         return controlGroup === TREATMENT_VARIATION
+        // Otherwise determine if the user is in the treatment group
       } else if (
         (experiment.limitToLanguages?.length
           ? experiment.limitToLanguages.includes(locale)
           : true) &&
         (experiment.limitToVersions?.length ? experiment.limitToVersions.includes(version) : true)
       ) {
+        // If the user has staffonly cookie, and staff override is true, show the experiment
         if (experiment.alwaysShowForStaff) {
           if (isStaff) {
             userIsStaff = true
@@ -69,14 +74,16 @@ export function shouldShowExperiment(
   return false
 }
 
+// Allow developers to override their experiment group for the current session
 export const controlGroupOverride = {} as { [key in ExperimentNames]: 'treatment' | 'control' }
 if (typeof window !== 'undefined') {
-  // @ts-expect-error -- window.overrideControlGroup is a global debugging hook.
+  // @ts-expect-error globally available function
   window.overrideControlGroup = (
     experimentKey: ExperimentNames,
     controlGroup: 'treatment' | 'control',
   ): string => {
     const activeExperiments = getActiveExperiments('all')
+    // Make sure key is valid
     if (activeExperiments.some((experiment) => experiment.key === experimentKey)) {
       controlGroupOverride[experimentKey] = controlGroup
       const event = new Event('controlGroupOverrideChanged')
@@ -90,6 +97,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Determine if the user is in the treatment or control group for a given experiment
 export function getExperimentControlGroupFromSession(
   experimentKey: ExperimentNames,
   percentToGetExperiment = 50,
@@ -99,7 +107,8 @@ export function getExperimentControlGroupFromSession(
   } else if (process.env.NODE_ENV === 'test') {
     return CONTROL_VARIATION
   }
-  // Hash the 365-day events cookie ID so each browser stays in one group per experiment.
+  // We hash the user's events ID to ensure that the user is always in the same group for a given experiment
+  // This works because the hash is a deterministic and the user's ID is stored in a cookie for 365 days
   const id = getUserEventsId()
   const hash = murmur(experimentKey).hash(id).result()
   const modHash = hash % 100
@@ -110,7 +119,7 @@ export function getExperimentVariationForContext(locale: string, version: string
   const experiments = getActiveExperiments(locale, version)
   for (const experiment of experiments) {
     if (experiment.includeVariationInContext) {
-      // feature=<turnOnWithURLParam> or staff readers with alwaysShowForStaff force treatment.
+      // If the user is using the URL param to view the experiment, include the variation in the context
       if (
         (experiment.turnOnWithURLParam &&
           window.location?.search
@@ -127,6 +136,7 @@ export function getExperimentVariationForContext(locale: string, version: string
     }
   }
 
+  // When no experiment has `includeVariationInContext: true`
   return CONTROL_VARIATION
 }
 
@@ -138,8 +148,10 @@ export function initializeExperiments(
   if (experimentsInitialized) return
   experimentsInitialized = true
 
+  // Replace any occurrence of 'enterprise-server@latest' with the actual latest version
   for (const [experimentKey, experiment] of Object.entries(EXPERIMENTS)) {
     if (experiment.limitToVersions?.includes('enterprise-server@latest')) {
+      // Sort the versions in descending order so that the latest enterprise-server version is first
       const latestEnterpriseServerVersion = Object.keys(allVersions)
         .filter((version) => version.startsWith('enterprise-server@'))
         .sort((a, b) => {
@@ -164,6 +176,7 @@ export function initializeExperiments(
   let numberOfExperimentsUsingContext = 0
   for (const experiment of experiments) {
     if (experiment.includeVariationInContext) {
+      // Validate the experiments object
       numberOfExperimentsUsingContext++
       if (numberOfExperimentsUsingContext > 1) {
         throw new Error(
@@ -177,14 +190,15 @@ export function initializeExperiments(
       experiment.percentOfUsersToGetExperiment,
     )
 
-    // Log the group in every environment so developers can confirm which variation they see.
+    // In any environment, it is useful to see if a given experiment is "on" or "off"
     console.log(
       `Experiment ${experiment.key} is in the "${controlGroup === TREATMENT_VARIATION ? TREATMENT_VARIATION : CONTROL_VARIATION}" group for this browser.\nCall function window.overrideControlGroup('${experiment.key}', 'treatment' | 'control') to change your group for this session.`,
     )
   }
 }
 
-// Experiments with turnOnWithURLParam keep the feature query parameter across link navigation.
+// If we have an experiment enabled that supports turnOnWithURLParam, we need to listen to
+// all clicks on links to ensure we forward the `feature` query param to the new page
 export function initializeForwardFeatureUrlParam(router: NextRouter, currentVersion: string) {
   const experiments = getActiveExperiments(router.locale || 'en', currentVersion)
 
@@ -195,6 +209,7 @@ export function initializeForwardFeatureUrlParam(router: NextRouter, currentVers
   try {
     const searchParams = new URLSearchParams(window.location.search)
     const featureValue = searchParams.get('feature')
+    // If the user's URL doesn't include `feature`, we don't need to forward it
     if (!featureValue) return
 
     const updateAnchorHref = (anchor: HTMLAnchorElement): void => {
@@ -212,6 +227,7 @@ export function initializeForwardFeatureUrlParam(router: NextRouter, currentVers
       if (!(event.target instanceof Element)) return
       const anchor = event.target.closest('a')
       if (anchor) {
+        // If we found that the target is an anchor, we need to update and manually navigate to it
         event.preventDefault()
         updateAnchorHref(anchor)
       }
@@ -222,6 +238,7 @@ export function initializeForwardFeatureUrlParam(router: NextRouter, currentVers
       if (!(event.target instanceof Element)) return
       const anchor = event.target.closest('a')
       if (anchor) {
+        // If we found that the target is an anchor, we need to update and manually navigate to it
         event.preventDefault()
         updateAnchorHref(anchor)
       }

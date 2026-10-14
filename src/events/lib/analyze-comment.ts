@@ -17,7 +17,7 @@ async function getLanguageInstance() {
   return language
 }
 
-// analyze-comment-cli.ts imports SIGNAL_RATINGS to show each signal.
+// Exported for the debugging CLI script
 export const SIGNAL_RATINGS = [
   {
     reduction: 1.0,
@@ -91,7 +91,15 @@ export async function getGuessedLanguage(comment: string) {
 
   const lang = await getLanguageInstance()
   const bestGuess = lang.guessBest(comment.trim(), [])
-  if (!bestGuess) return // The guesser can return no result for non-empty text.
+  if (!bestGuess) return // Can happen if the text is just whitespace
+  // // @horizon-rs/language-guesser is based on tri-grams and can lead
+  // // to false positives. For example, it thinks that 'Thamk you ❤️🙏' is
+  // // Haitian! And that 'I wanne robux 1000' is Polish!
+  // // But that's because they are short and there's not enough clues to
+  // // guess what language it is. You and I might know those are actually
+  // // attempts to be English, despite the spelling.
+  // // But are they useful comments? Given that this is just a signal,
+  // // and not a hard blocker, it's more of a clue than a fact.
 
   return bestGuess.alpha2 || undefined
 }
@@ -121,7 +129,8 @@ function isEmailOnly(text: string) {
 
 function isContainingEmail(text: string) {
   if (text.includes('@') && !isEmailOnly(text)) {
-    // Don't use splitWords here, because it splits octocat@github.com into octocat and github.com.
+    // Don't use splitWords() here because `foo@example.com` will be
+    // split up into ['foo', 'example.com'].
     return text.split(/\s+/g).some((word) => isEmailOnly(word))
   }
   return false
@@ -150,17 +159,25 @@ function isTooShort(text: string) {
 
 function isSingleWord(text: string) {
   const whitespaceSplit = text.trim().split(/\s+/)
-  // Single path-like tokens such as snap/hooks/install count as one word.
+  // E.g. `this-has-no-whitespace` or `snap/hooks/install`
   return whitespaceSplit.length === 1
 }
 
-// @horizon-rs/language-guesser can misclassify short misspelled English like `Thamk you`.
-// This signal lowers confidence instead of blocking because the guess is a clue, not a fact.
 async function isNotLanguage(text: string, language_: string) {
   const lang = await getLanguageInstance()
   const bestGuess = lang.guessBest(text.trim(), [])
-  if (!bestGuess) return true // The guesser can return no result for non-empty text.
-  // Do not lower score when the guesser labels a comment as English.
+  if (!bestGuess) return true // Can happen if the text is just whitespace
+  // @horizon-rs/language-guesser is based on tri-grams and can lead
+  // to false positives. For example, it thinks that 'Thamk you ❤️🙏' is
+  // Haitian! And that 'I wanne robux 1000' is Polish!
+  // But that's because they are short and there's not enough clues to
+  // guess what language it is. You and I might know those are actually
+  // attempts to be English, despite the spelling.
+  // But are they useful comments? Given that this is just a signal,
+  // and not a hard blocker, it's more of a clue than a fact.
+
+  // We don't want to reduce the score for English comments. English
+  // comments, when evaluated by language, are always valid.
   return bestGuess.alpha2 !== language_ && bestGuess.alpha2 !== 'en'
 }
 
@@ -215,6 +232,7 @@ const surveyWords = surveyYaml.words.map((word: string) => word.toLowerCase())
 
 function isSpammyWordList(text: string) {
   const words = text.toLowerCase().split(/(\s+|\\n+)/g)
-  // Match whole survey-word tokens only, not substrings inside longer words.
+  // Currently, we're intentionally not checking for
+  // survey words that are substrings of a comment word.
   return Boolean(words.some((word) => surveyWords.includes(word)))
 }

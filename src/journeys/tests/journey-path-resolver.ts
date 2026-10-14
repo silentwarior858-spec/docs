@@ -4,7 +4,8 @@ import { resolveJourneyContext, resolveJourneyTracks } from '../lib/journey-path
 import getLinkData from '@/journeys/lib/get-link-data'
 import type { Page } from '@/types'
 
-// Mock dependencies so journey functions run without real content files.
+// Mock modules since we just want to test journey functions, not their dependencies or
+// against real content files
 vi.mock('@/journeys/lib/get-link-data', () => ({
   default: vi.fn(async (rawLinks: string | string[] | undefined) => {
     const path = Array.isArray(rawLinks) ? rawLinks[0] : rawLinks
@@ -184,12 +185,15 @@ describe('journey-path-resolver', () => {
     })
 
     test('normalizes article paths without leading slash', async () => {
+      // The resolver should handle paths without leading slashes
+      // by normalizing them to match the guide paths in the data
       const result = await resolveJourneyContext(
         'enterprise-onboarding/config',
         mockPages,
         mockContext,
       )
 
+      // This should find the same track as the version with leading slash
       expect(result?.trackId).toBe('getting_started')
       expect(result?.currentGuideIndex).toBe(1)
     })
@@ -233,7 +237,7 @@ describe('journey-path-resolver', () => {
     test('renders liquid templates in titles and descriptions', async () => {
       const result = await resolveJourneyTracks(mockJourneyTracks, mockContext)
 
-      // The mock renderContent returns input unchanged.
+      // Should return the content as-is since our mock renderContent is a passthrough
       expect(result[0].title).toBe(
         'Getting started with {% data variables.product.company_short %}',
       )
@@ -246,18 +250,19 @@ describe('journey-path-resolver', () => {
       mockRenderContent.mockClear()
       const result = await resolveJourneyTracks(mockJourneyTracks, mockContext)
 
-      // The mock renderer passes content through, so the Liquid is unchanged.
+      // Liquid value passes through the (passthrough) renderer; plain string is unchanged
       expect(result[0].timeCommitment).toBe('{% data variables.product.company_short %} 2-4 hours')
       expect(result[1].timeCommitment).toBe('4-6 hours')
 
-      // Liquid timeCommitment renders with textOnly, matching titles and descriptions.
+      // The Liquid-bearing timeCommitment should be rendered with { textOnly: true },
+      // matching how title/description are rendered.
       const timeCommitmentCall = mockRenderContent.mock.calls.find(
         ([content]) => content === '{% data variables.product.company_short %} 2-4 hours',
       )
       expect(timeCommitmentCall).toBeDefined()
       expect(timeCommitmentCall?.[2]).toEqual({ textOnly: true })
 
-      // Plain timeCommitment skips renderContent.
+      // Plain (non-Liquid) timeCommitment should not be sent through renderContent
       const plainCall = mockRenderContent.mock.calls.find(([content]) => content === '4-6 hours')
       expect(plainCall).toBeUndefined()
     })
@@ -306,6 +311,7 @@ describe('journey-path-resolver', () => {
 
   describe('resolveJourneyContext with version-filtered guides', () => {
     afterEach(() => {
+      // Restore the default implementation after each test in this block
       mockGetLinkData.mockImplementation(async (rawLinks: string | string[] | undefined) => {
         const path = Array.isArray(rawLinks) ? rawLinks[0] : rawLinks
         if (!path) return undefined

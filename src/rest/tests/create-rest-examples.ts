@@ -14,7 +14,10 @@ import {
 } from '../fixtures/create-rest-examples'
 
 describe('rest example requests and responses', () => {
-  // One request with multiple contentless responses yields examples only for statuses below 300.
+  // If there is a request with no request body parameters and all of
+  // the responses have no content, then we can create a docs
+  // example for just status codes below 300. All other status codes will
+  // be listed in the status code table in the docs.
   test('check that examples with no content are created', async () => {
     const examples = mergeExamples(noContent.request, noContent.response)
     const mergedExamples = JSON.stringify(noContent.merged)
@@ -52,6 +55,7 @@ describe('rest example requests and responses', () => {
 
   test('check example number and status code appear', async () => {
     const mergedExamples = await getCodeSamples(operation)
+    // example has specific structure from getCodeSamples
     for (let index = 0; index < mergedExamples.length; index++) {
       const example = mergedExamples[index] as {
         request: { description: string }

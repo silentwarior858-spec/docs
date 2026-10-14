@@ -1,6 +1,10 @@
-// OpenAPI descriptions vary by endpoint, so these shared REST sync types keep
-// index signatures for unmodeled fields while declaring the fields this pipeline
-// reads.
+// Loose-but-typed OpenAPI shapes shared across the REST sync pipeline
+// (get-operations, operation, create-rest-examples, sync).
+//
+// The upstream OpenAPI descriptions are dynamic and vary by endpoint, so each
+// interface keeps an index signature escape hatch (`[key: string]: unknown`)
+// for properties we don't model explicitly. This replaces the `any` types these
+// modules previously used while still describing the fields the code reads.
 
 export interface OpenApiMediaType {
   example?: unknown
@@ -62,7 +66,7 @@ export interface OpenApiOperation {
   responses: Record<string, OpenApiResponse>
   previews?: unknown[]
   'x-github': OpenApiGitHubExtension
-  // Operation adds these fields during processing.
+  // Attached during processing by the Operation class
   serverUrl?: string
   requestPath?: string
   verb?: string

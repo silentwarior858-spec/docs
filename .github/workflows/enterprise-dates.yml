@@ -1,12 +1,17 @@
 name: Enterprise date updater
 
-# Keep src/ghes-releases/lib/enterprise-dates.json current for deprecation banner dates
-# and historical GitHub Enterprise Server release references.
+# **What it does**: Runs on a schedule to update
+# src/ghes-releases/lib/enterprise-dates.json.
+# **Why we have it**: The src/ghes-releases/lib/enterprise-dates.json
+# file needs to be up-to-date for the
+# Used to display deprecation banner dates and as a reference
+# for all past server release numbers.
+# **Who does it impact**: Docs engineering, docs content.
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 16 * * 1'
+    - cron: '20 16 * * 1' # Run every Monday at 16:20 UTC / 8:20 PST
 
 permissions:
   contents: write
@@ -31,11 +36,10 @@ jobs:
         id: create-pull-request
         uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # pin @v8.0.0
         env:
-          # Create-pull-request runs git commands itself, so disable hooks that can
-          # change the worktree.
+          # Disable pre-commit hooks; they don't play nicely here
           HUSKY: '0'
         with:
-          # This PR update requires repo and workflow scopes.
+          # need to use a token with repo and workflow scopes for this step
           token: ${{ secrets.DOCS_BOT_PAT_BASE }}
           commit-message: '🤖 ran src/ghes-releases/scripts/update-enterprise-dates.ts'
           title: 🤖 src/ghes-releases/lib/enterprise-dates.json update

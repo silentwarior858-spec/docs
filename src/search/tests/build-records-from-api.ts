@@ -72,9 +72,11 @@ Setup steps.
 ## **Bold** heading
 `
     const headings = extractHeadingsFromMarkdown(markdown)
+    // Verify complete heading text with formatting stripped
     expect(headings).toContain('Using code in headings')
     expect(headings).toContain('A link heading')
     expect(headings).toContain('Bold heading')
+    // Should not contain markdown syntax
     expect(headings).not.toContain('`')
     expect(headings).not.toContain('**')
     expect(headings).not.toContain('](')
@@ -113,15 +115,15 @@ Some content without sections.
   })
 
   test('filters out non-English navigational headings across languages', () => {
-    // Chinese translations stay filtered.
+    // Chinese
     expect(extractHeadingsFromMarkdown('## 本文内容\n\n## 实际内容')).toBe('实际内容')
     expect(extractHeadingsFromMarkdown('## 延伸阅读\n\n## 实际内容')).toBe('实际内容')
 
-    // Korean translations stay filtered.
+    // Korean
     expect(extractHeadingsFromMarkdown('## 이 문서의 내용\n\n## 실제 내용')).toBe('실제 내용')
     expect(extractHeadingsFromMarkdown('## 추가 참고 자료\n\n## 실제 내용')).toBe('실제 내용')
 
-    // Spanish translations stay filtered.
+    // Spanish
     expect(extractHeadingsFromMarkdown('## En este artículo\n\n## Contenido real')).toBe(
       'Contenido real',
     )
@@ -129,13 +131,13 @@ Some content without sections.
       'Contenido real',
     )
 
-    // French translations stay filtered.
+    // French
     expect(extractHeadingsFromMarkdown('## Dans cet article\n\n## Contenu réel')).toBe(
       'Contenu réel',
     )
     expect(extractHeadingsFromMarkdown('## Prérequis\n\n## Contenu réel')).toBe('Contenu réel')
 
-    // German translations stay filtered.
+    // German
     expect(extractHeadingsFromMarkdown('## Voraussetzungen\n\n## Echter Inhalt')).toBe(
       'Echter Inhalt',
     )
@@ -159,6 +161,7 @@ This is **bold** and *italic* text.
     expect(text).toContain('italic')
     expect(text).toContain('List item 1')
     expect(text).toContain('A link')
+    // Should not contain markdown syntax
     expect(text).not.toContain('**')
     expect(text).not.toContain('](')
   })
@@ -191,7 +194,7 @@ More text.
 2. Make a request using the CLI.
 `
     const text = markdownToPlainText(markdown)
-    // SSH. and Make must not merge into SSH.Make.
+    // "SSH." and "Make" must not merge into "SSH.Make"
     expect(text).not.toMatch(/SSH\.Make/)
     expect(text).toMatch(/SSH\.\n/)
     expect(text).toContain('Make a request')
@@ -203,7 +206,7 @@ More text.
 > Second paragraph in blockquote.
 `
     const text = markdownToPlainText(markdown)
-    // Paragraphs within a blockquote stay separated.
+    // Paragraphs within a blockquote should be separated
     expect(text).not.toMatch(/blockquote\.Second/)
     expect(text).toContain('First paragraph in blockquote.')
     expect(text).toContain('Second paragraph in blockquote.')
@@ -231,7 +234,7 @@ More text.
     expect(text).not.toContain('[!WARNING]')
     expect(text).not.toContain('[!IMPORTANT]')
     expect(text).not.toContain('[!CAUTION]')
-    // Alert body text stays searchable.
+    // The alert body text should still be present
     expect(text).toContain('This is a note.')
     expect(text).toContain('This is a tip.')
     expect(text).toContain('This is a warning.')
@@ -253,6 +256,7 @@ More text.
     expect(text).toContain('Column A')
     expect(text).toContain('Cell 1')
     expect(text).toContain('More text')
+    // Should not contain raw GFM table syntax artifacts
     expect(text).not.toContain('| ---')
     expect(text).not.toContain('---')
   })
@@ -280,10 +284,10 @@ More content.
 `
     const result = extractFromMarkdown(markdown)
 
-    // Further reading stays out of headings.
+    // Headings should exclude "Further reading"
     expect(result.headings).toBe('Section One\nSection Two')
 
-    // Fenced code block text stays searchable.
+    // Content should include fenced code block text
     expect(result.content).toContain('Some content')
     expect(result.content).toContain('More content')
     expect(result.content).toContain('"key"')
@@ -353,7 +357,7 @@ Here's how to begin.
         title: 'Archived Page',
         intro: 'This is archived.',
         product: 'Old product',
-        // Archived pages can omit breadcrumbs.
+        // No breadcrumbs - simulating archived page
       },
       body: '# Archived Page\n\nContent here.',
     }
@@ -378,7 +382,7 @@ Here's how to begin.
 
     const record = articleApiResponseToRecord('/en/get-started', response)
 
-    // Single-breadcrumb product landing pages keep that breadcrumb.
+    // For single breadcrumb, don't slice it off
     expect(record.breadcrumbs).toBe('Get started')
     expect(record.toplevel).toBe('Get started')
   })
@@ -413,7 +417,7 @@ Here's how to begin.
 
     const record = articleApiResponseToRecord('/en/test', response)
 
-    // The intro appears only once.
+    // Intro should appear only once
     const introCount = (record.content.match(/Same intro/g) || []).length
     expect(introCount).toBe(1)
   })
@@ -449,10 +453,10 @@ The \`name\` parameter is required.
 
     expect(record.content).toContain('Use the endpoint below')
     expect(record.content).toContain('parameter is required')
-    // Fenced code block content stays searchable.
+    // Fenced code block content should be included for search
     expect(record.content).toContain('ssh_url')
     expect(record.content).toContain('ssh://git@github.com')
-    // Inline code content stays searchable.
+    // Inline code content should also be preserved
     expect(record.content).toContain('name')
   })
 })
@@ -651,9 +655,11 @@ describe('fetchArticleAsRecord', () => {
 
     const result = await fetchArticleAsRecord('/en/test', 'http://localhost:4002')
 
+    // Verify the shape of FetchResult
     expect(result).toHaveProperty('record')
     expect(result).toHaveProperty('failure')
 
+    // When successful, record should have all expected fields
     expect(result.record).toHaveProperty('objectID')
     expect(result.record).toHaveProperty('title')
     expect(result.record).toHaveProperty('intro')

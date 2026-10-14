@@ -4,7 +4,13 @@ import { getReleaseNotes } from '@/release-notes/middleware/get-release-notes'
 import { formatReleases } from '@/release-notes/lib/release-notes-utils'
 import { renderContent } from '@/content-render/index'
 
-// GHES release notes come from YAML; ArticleTransformer would return an empty markdown body.
+/**
+ * Transformer for GHES enterprise-server release notes pages.
+ *
+ * The release notes content comes from YAML data files (not the markdown body),
+ * so the generic ArticleTransformer would return an empty body. This transformer
+ * fetches the release notes data directly and renders it as markdown.
+ */
 export class ReleaseNotesTransformer implements PageTransformer {
   canTransform(page: Page): boolean {
     return page.layout === 'release-notes'
@@ -36,7 +42,8 @@ export class ReleaseNotesTransformer implements PageTransformer {
   }
 }
 
-// Match the web renderer labels in src/release-notes/components/PatchNotes.tsx.
+// Matches the labels used by the web renderer; keep in sync with
+// src/release-notes/components/PatchNotes.tsx.
 const SECTION_LABELS: Record<string, string> = {
   features: 'Features',
   bugs: 'Bug fixes',
@@ -54,9 +61,10 @@ async function renderNoteMarkdown(raw: string, context: Context): Promise<string
   return await renderContent(raw, { ...context, markdownRequested: true })
 }
 
-// Format text as a list item at the given indent depth.
-// Continuation lines align under the bullet.
-// CommonMark and GitHub Flavored Markdown keep paragraphs and fenced code blocks inside the item.
+// Format `text` as a list item at the given indent depth. The first line
+// gets the `- ` bullet; continuation lines are indented to align under it,
+// so multi-paragraph notes and fenced code blocks stay inside the list item
+// per CommonMark/GFM rules.
 function bulletize(text: string, depth = 0): string {
   const trimmed = text.replace(/\s+$/, '')
   if (!trimmed) return ''

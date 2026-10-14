@@ -11,6 +11,7 @@ describe('anchor-redirect api', () => {
   )
 
   test('returns correct redirect to url', async () => {
+    // test the first entry
     const [key, value] = Object.entries(clientSideRedirects)[0]
     const [path, hash] = key.split('#')
     const sp = new URLSearchParams()
@@ -22,6 +23,7 @@ describe('anchor-redirect api', () => {
     expect(to).toBe(value)
   })
   test('errors when path is not passed', async () => {
+    // test the first entry
     const key = Object.keys(clientSideRedirects)[0]
     const hash = key.split('#')[1]
     const sp = new URLSearchParams()
@@ -30,6 +32,7 @@ describe('anchor-redirect api', () => {
     expect(res.statusCode).toBe(400)
   })
   test('errors when path is not passed', async () => {
+    // test the first entry
     const key = Object.keys(clientSideRedirects)[0]
     const path = key.split('#')[0]
     const sp = new URLSearchParams()

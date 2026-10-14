@@ -7,6 +7,7 @@ import type {
 
 export type SearchTypes = 'generalSearch' | 'aiSearchAutocomplete'
 
+// Responses to API routes
 export interface GeneralSearchResponse {
   meta: SearchResultsMeta & {
     page: number
@@ -25,6 +26,7 @@ export interface CombinedSearchResponse {
   generalSearchResults: GeneralSearchResponse
 }
 
+// Response to middleware /search route
 export interface SearchOnReqObject<Type extends SearchTypes> {
   searchParams: ComputedSearchQueryParamsMap[Type]
   validationErrors: SearchValidationErrorEntry[]
@@ -37,6 +39,7 @@ export interface SearchValidationErrorEntry {
   field?: string
 }
 
+// - - - Types for building the search responses - - -
 export interface GeneralSearchHitWithoutIncludes {
   id: string
   url: string

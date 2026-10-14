@@ -10,10 +10,24 @@ declare module '@primer/octicons' {
   }
 
   interface Octicon {
+    /**
+     * The SVG path data for the icon
+     */
     path: string
+
+    /**
+     * The default width of the icon
+     */
     width: number
+
+    /**
+     * The default height of the icon
+     */
     height: number
 
+    /**
+     * Heights-based icon data
+     */
     heights: {
       [size: number]: {
         path: string
@@ -22,13 +36,16 @@ declare module '@primer/octicons' {
       }
     }
 
+    /**
+     * Convert the octicon to an SVG string
+     */
     toSVG(options?: OcticonOptions): string
   }
 
   const octicons: {
     [iconName: string]: Octicon
 
-    // This non-exhaustive list improves autocomplete for common icons.
+    // Common icons (non-exhaustive list for better autocomplete)
     alert: Octicon
     check: Octicon
     'check-circle': Octicon

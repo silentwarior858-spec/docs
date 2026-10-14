@@ -1,5 +1,14 @@
-// Debug comment signals with npm run analyze-comment -- "I love this site\!" --verbose.
-// Pipe a file to npm run analyze-comment to read the comment from stdin.
+/**
+ * This script can be used to debug and test our signals.
+ * Example use:
+ *
+ *    npm run analyze-comment -- "I love this site\!" --verbose
+ *
+ * or, using stdin:
+ *
+ *    cat naught-comment.txt | npm run analyze-comment
+ *
+ */
 
 import fs from 'node:fs'
 import util from 'node:util'
@@ -24,7 +33,7 @@ program.parse(process.argv)
 
 async function main(comment?: string, options?: Options) {
   if (!comment) {
-    const stdinBuffer = fs.readFileSync(0) // File descriptor 0 reads stdin.
+    const stdinBuffer = fs.readFileSync(0) // STDIN_FILENO = 0
     comment = stdinBuffer.toString()
   }
   if (!comment.trim()) {
@@ -33,7 +42,7 @@ async function main(comment?: string, options?: Options) {
   }
 
   console.log(chalk.grey('Comment:'), chalk.bold(util.inspect(comment)))
-  console.log()
+  console.log('') // whitespace
 
   const language = options?.language || 'en'
 
@@ -59,8 +68,7 @@ async function main(comment?: string, options?: Options) {
       console.log(chalk.green(`Not triggered on ${chalk.bold(name)}`))
     }
   }
-
-  console.log()
+  console.log('') // whitespace
   if (!broke) {
     console.log(chalk.whiteBright(`Final rating: ${chalk.bold(rating.toFixed(1))}`))
   }

@@ -1,5 +1,5 @@
 import GithubSlugger from 'github-slugger'
-import cx from 'clsx'
+import cx from 'classnames'
 
 import { HeadingLink } from '@/frame/components/article/HeadingLink'
 import { useTranslation } from '@/languages/components/useTranslation'

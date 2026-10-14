@@ -1,17 +1,28 @@
 import GithubSlugger from 'github-slugger'
 
-// Strip inline Markdown before slugging headings, matching hast-util-to-string after remark.
-// Code spans stay verbatim so HTML-tag stripping does not drop placeholders such as <job_id>.
-// Underscore names such as <job_id> stay as text; any other <...> sequence is removed as a tag.
-// No final .trim(): stripped SVG whitespace becomes trailing hyphens, matching IDs like allow--.
+/**
+ * Strip inline Markdown markup from a heading to get plain text for slug computation.
+ * Matches what hast-util-to-string produces on a heading node after remark parsing.
+ *
+ * Key design decisions:
+ * - Inline code spans (backtick) are extracted verbatim so that `<job_id>` inside them
+ *   is not incorrectly stripped by the HTML-tag regex (which is needed for octicon SVGs).
+ * - HTML stripping only removes valid HTML element names (no underscores) to avoid stripping
+ *   angle-bracket placeholders like <job_id> that appear in code-span heading text.
+ * - No final .trim() — trailing whitespace from stripped SVGs becomes trailing hyphens via
+ *   github-slugger, reproducing the live site's heading IDs (e.g. `allow--`).
+ */
 export function headingTextToPlain(text: string): string {
-  // Use a state machine instead of a regex so CodeQL can analyze the tag stripping.
+  // Strip HTML tags using a state machine rather than a regex so that CodeQL can verify
+  // the stripping is complete. Tags like <script\n...> or tags with '>' in attribute values
+  // are handled correctly. Output is only used for slug computation, never rendered as HTML.
   function stripHtmlTags(s: string): string {
     let out = ''
     let inTag = false
     for (let i = 0; i < s.length; i++) {
       if (!inTag && s[i] === '<') {
-        // Preserve placeholders such as <job_id> as text so their slugs keep the name.
+        // Peek ahead: if this looks like an underscore-containing placeholder (e.g. <job_id>),
+        // emit the inner text instead of dropping it entirely so the slug stays correct.
         const close = s.indexOf('>', i + 1)
         if (close !== -1) {
           const inner = s.slice(i + 1, close)
@@ -24,7 +35,9 @@ export function headingTextToPlain(text: string): string {
         inTag = true
       } else if (inTag && s[i] === '>') {
         inTag = false
-        // Source whitespace already gives github-slugger the separator after stripped SVG tags.
+        // Don't emit a replacement space — surrounding whitespace in the source markdown
+        // already provides the correct spacing for github-slugger (e.g. `allow ` from
+        // the space before an octicon tag).
       } else if (!inTag) {
         out += s[i]
       }
@@ -32,17 +45,19 @@ export function headingTextToPlain(text: string): string {
     return out
   }
 
+  // Process non-code portions: strip HTML and inline formatting markup.
   function processNonCode(s: string): string {
     return stripHtmlTags(s)
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // image: ![GitHub logo](/logo.svg) to GitHub logo
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // link: [GitHub Docs](/get-started) to GitHub Docs
-      .replace(/\*\*([^*]+)\*\*/g, '$1') // double asterisks mark bold text
-      .replace(/\*([^*]+)\*/g, '$1') // italic: *GitHub Docs* to GitHub Docs
-      .replace(/(?<![a-zA-Z0-9_])__([^_]+)__(?![a-zA-Z0-9_])/g, '$1') // bold underscores
-      .replace(/(?<![a-zA-Z0-9_])_([^_]+)_(?![a-zA-Z0-9_])/g, '$1') // italic underscores
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // images: ![alt](url) → alt
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links: [text](url) → text
+      .replace(/\*\*([^*]+)\*\*/g, '$1') // bold **text**
+      .replace(/\*([^*]+)\*/g, '$1') // italic *text*
+      .replace(/(?<![a-zA-Z0-9_])__([^_]+)__(?![a-zA-Z0-9_])/g, '$1') // bold __text__
+      .replace(/(?<![a-zA-Z0-9_])_([^_]+)_(?![a-zA-Z0-9_])/g, '$1') // italic _text_
   }
 
-  // Code spans stay verbatim, matching hast-util-to-string raw text content.
+  // Split text into alternating non-code / code-span segments.
+  // Code spans are extracted verbatim (hast-util-to-string returns their raw text content).
   const parts: string[] = []
   let remaining = text
   while (remaining.length > 0) {
@@ -54,25 +69,32 @@ export function headingTextToPlain(text: string): string {
     if (open > 0) parts.push(processNonCode(remaining.slice(0, open)))
     const close = remaining.indexOf('`', open + 1)
     if (close === -1) {
-      // Unclosed backtick: treat the remainder as non-code.
+      // Unclosed backtick — treat remainder as non-code
       parts.push(processNonCode(remaining.slice(open)))
       break
     }
-    parts.push(remaining.slice(open + 1, close))
+    parts.push(remaining.slice(open + 1, close)) // code content verbatim
     remaining = remaining.slice(close + 1)
   }
-  // Keep trailing whitespace for stripped SVGs so github-slugger emits trailing hyphens.
   return parts.join('')
+  // Note: no .trim() — see comment above.
 }
 
-// Compute heading IDs from Liquid-rendered Markdown with github-slugger, matching live IDs.
-// Repeated headings keep github-slugger suffixes such as -1 and -2.
-// Also includes Setext headings and raw HTML anchors with name or id attributes.
+/**
+ * Compute the set of heading anchor IDs for a page from its Liquid-rendered markdown.
+ *
+ * Uses github-slugger (the same library as rehype-slug in the render pipeline) to compute
+ * heading anchor IDs in document order, producing results that match the live site,
+ * including the `-1`, `-2`, ... dedupe suffixes github-slugger adds for repeated headings.
+ *
+ * Handles ATX headings (`## Heading`), Setext headings (underlined with `===`/`---`), and
+ * explicit `<a name="...">` / `<a id="...">` anchors embedded in the markdown.
+ */
 export function computeHeadingIds(renderedMarkdown: string): Set<string> {
   const slugger = new GithubSlugger()
   const headingIds = new Set<string>()
 
-  // ATX headings can include optional trailing hashes.
+  // ATX headings: ## Heading text (optional trailing ##)
   const ATX_HEADING_RE = /^#{1,6}\s+(.+?)(?:\s+#+)?\s*$/gm
   let m: RegExpExecArray | null
   while ((m = ATX_HEADING_RE.exec(renderedMarkdown)) !== null) {
@@ -85,7 +107,8 @@ export function computeHeadingIds(renderedMarkdown: string): Set<string> {
     headingIds.add(slugger.slug(headingTextToPlain(m[1])))
   }
 
-  // Some pages, such as site-policy, carry raw HTML anchors instead of headings.
+  // Explicit <a name="..."> and <a id="..."> anchors embedded in the markdown.
+  // Some pages (e.g. site-policy) use raw HTML anchors instead of headings.
   const NAMED_ANCHOR_RE = /<a\s[^>]*(?:name|id)="([^"]+)"[^>]*>/gi
   while ((m = NAMED_ANCHOR_RE.exec(renderedMarkdown)) !== null) {
     headingIds.add(m[1])

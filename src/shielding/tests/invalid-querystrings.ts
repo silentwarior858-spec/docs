@@ -12,7 +12,8 @@ const alphabet = alpha.map((x) => String.fromCharCode(x))
 
 describe('invalid query strings', () => {
   test('400 for too many unrecognized query strings', async () => {
-    // The exported threshold keeps this test tied to the middleware limit.
+    // This test depends on knowing exactly the number
+    // of unrecognized query strings that will trigger a 400.
     const sp = new URLSearchParams()
     for (const letter of alphabet.slice(0, MAX_UNFAMILIAR_KEYS_BAD_REQUEST)) {
       sp.set(letter, '1')
@@ -26,7 +27,8 @@ describe('invalid query strings', () => {
   })
 
   test('302 redirect for many unrecognized query strings', async () => {
-    // The exported threshold keeps this test tied to the middleware limit.
+    // This test depends on knowing exactly the number
+    // of unrecognized query strings that will trigger a 400.
     const sp = new URLSearchParams()
     for (const letter of alphabet.slice(0, MAX_UNFAMILIAR_KEYS_REDIRECT)) {
       sp.set(letter, '1')
@@ -56,7 +58,7 @@ describe('invalid query strings', () => {
     const res = await get(url)
     expect(res.statusCode).toBe(302)
     expect(res.headers.location).toBe('/en')
-    // The 8-character rule applies to root-level paths.
+    // But note that it only applies to the home page!
     {
       const nestedUrl = `/en/get-started?${randomCharacters(8)}`
       const nestedRes = await get(nestedUrl)
@@ -70,7 +72,7 @@ describe('invalid query strings', () => {
     expect(res.statusCode).toBe(400)
     expect(res.headers['content-type']).toMatch('text/plain')
     expect(res.body).toMatch('Invalid query string')
-    // Do not reflect the user-supplied key name.
+    // Must not reflect the user-supplied key name
     expect(res.body).not.toContain('(query)')
   })
 
@@ -80,7 +82,7 @@ describe('invalid query strings', () => {
     expect(res.statusCode).toBe(400)
     expect(res.headers['content-type']).toMatch('text/plain')
     expect(res.body).toMatch('Invalid query string')
-    // Do not reflect the user-supplied key name.
+    // Must not reflect the user-supplied key name
     expect(res.body).not.toContain('(constructor)')
   })
 
@@ -100,9 +102,11 @@ describe('invalid query strings', () => {
     expect(res.body).not.toContain('alert')
   })
 
-  // Bug bounty proof of concept: enough unrecognized query keys force a redirect.
-  // safeRedirect normalizes // to / so Location cannot become protocol-relative.
   test('redirect from unrecognized query strings does not produce open redirect', async () => {
+    // This is the exact PoC from the bug bounty report.
+    // With enough unrecognized query keys, the middleware redirects
+    // using req.path. res.safeRedirect normalizes // to / so the
+    // Location header can never be a protocol-relative URL.
     const res = await get('//evil.com?a=1&b=2&c=3')
     expect(res.headers.location).not.toMatch(/^\/\//)
   })

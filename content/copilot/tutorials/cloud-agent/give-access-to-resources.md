@@ -8,8 +8,6 @@ contentType: tutorials
 category:
   - Manage Copilot for a team
   - Roll Copilot out at scale
-docsTeamMetrics:
-  - ai-governance
 ---
 
 {% data variables.copilot.copilot_cloud_agent %} can connect to MCP servers, use private packages, and access external services, but only if your organization's repositories are configured to allow it.

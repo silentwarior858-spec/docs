@@ -1,4 +1,5 @@
-// JSON.stringify can throw on circular references, so fall back to String().
+// Safely convert an unknown thrown value to an Error, avoiding JSON.stringify
+// which can throw on circular references.
 export function toError(value: Error | unknown): Error {
   if (value instanceof Error) return value
   try {

@@ -14,9 +14,9 @@ type Option = {
   label: string
 }
 type Props = {
-  // Used when the query string does not specify a valid value.
+  // Use this if not specified on the query string
   defaultValue?: string
-  // Used when the query string is invalid, defaultValue is unset, and the cookie is invalid.
+  // Use this if not specified on the query string or no cookie
   fallbackValue: string
   cookieKey: string
   queryStringKey: string
@@ -39,9 +39,12 @@ export const InArticlePicker = ({
   const { query, locale } = router
   const [currentValue, setCurrentValue] = useState('')
 
-  // True after user clicks, so focus moves only for direct tab selection.
+  // Tracks whether the last currentValue change was triggered by a user click
+  // (as opposed to initial mount or external navigation). When true, we move
+  // focus to the newly-selected tab so keyboard users don't lose their place.
   const focusAfterNavRef = useRef(false)
 
+  // Run on mount for client-side only features
   useEffect(() => {
     const raw = query[queryStringKey]
     let value = ''
@@ -49,7 +52,8 @@ export const InArticlePicker = ({
       if (Array.isArray(raw)) value = raw[0]
       else value = raw
     }
-    // Ignore query string values outside this picker's options.
+    // Only pick it up from the possible query string if its value
+    // is a valid option.
     const possibleValues = options.map((option) => option.value)
     if (!value || !possibleValues.includes(value)) {
       const cookieValue = Cookies.get(cookieKey)
@@ -66,24 +70,49 @@ export const InArticlePicker = ({
 
   const [asPathRoot, asPathQuery = ''] = router.asPath.split('#')[0].split('?')
 
-  // Apply the selection before paint so non-matching .ghd-tool content does not flash.
+  // Use a layout effect so the DOM mutation (hiding non-matching .ghd-tool
+  // content) happens before the browser paints. With React 19's stricter
+  // effect timing, a regular useEffect could leave non-matching content
+  // visible on initial page load until after first paint.
   useIsomorphicLayoutEffect(() => {
-    // Initial values still need to update the page before the user interacts.
+    // This will make the hook run this callback on mount and on change.
+    // That's important because even though the user hasn't interacted
+    // and made an overriding choice, we still want to run this callback
+    // because the page might need to be corrected based on *a* choice
+    // independent of whether it's a change.
     if (currentValue) {
       onValue(currentValue)
     }
   }, [
     currentValue,
-    // Query string changes are handled separately, so depend on the route path only.
+    // This is important because we can't otherwise rely on the firing
+    // of this effect on initial mount. It also needs to fire when the
+    // URL (i.e. route) changes.
+    // Don't use `router.asPath` because that contains the query string
+    // which we handle in the other useEffect above.
     asPathRoot,
   ])
 
-  // Local ClientSideRefresh replaces article HTML on visibility changes, so reapply selection.
+  // This is exclusively for local development.
+  // If you're in local development, you have the <ClientSideRefresh>
+  // causing a XHR refresh of the content triggered by the Page Visibility
+  // API (implemented in the uswSWR hook). That means that on the pages that
+  // contain these `.ghd-tool` classes, any DOM changes we might
+  // have previously made are lost and started over.
   useEffect(() => {
     let mounted = true
     const toggleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        // Keep at least a 100 ms delay so refreshed HTML reaches the DOM before selection changes it.
+        // We don't need to track this timer, and possibly cancel it on
+        // dismount, because within the callback we use the `mounted`
+        // boolean which means we can know to do nothing if the parent
+        // component has been dismounted.
+        // The reason this is wrapped in a short timeout is because the
+        // React rendering might not actually have fully updated the DOM
+        // (from the XHR HTML it receives) so allow the DOM to refresh
+        // first before asking it to change. The number can be quite low
+        // (which is sufficient for human eyes) but must be at least
+        // in the lower hundreds of milliseconds.
         setTimeout(() => {
           if (mounted) {
             onValue(currentValue)
@@ -119,7 +148,10 @@ export const InArticlePicker = ({
     Cookies.set(cookieKey, value)
   }
 
-  // WCAG 2.4.3 requires focus to remain on the triggered tab after shallow routing.
+  // After a user clicks a tab, the shallow route change updates `currentValue`.
+  // Once the DOM reflects the new selection (aria-current="page" is on the new
+  // tab), move keyboard focus there so the user's context is preserved.
+  // WCAG 2.4.3 Focus Order — focus must land on the triggered control.
   useEffect(() => {
     if (!focusAfterNavRef.current || !currentValue) return
     focusAfterNavRef.current = false
@@ -139,7 +171,7 @@ export const InArticlePicker = ({
 
   return (
     <div data-testid={`${queryStringKey}-picker`} className={styles.container}>
-      {/* UnderlineNav can miss item changes without a changing key. */}
+      {/* The key attribute is required for a bug in UnderlineNav that doesn't render the component when there are changes to the items. */}
       <UnderlineNav key={router.asPath} {...sharedContainerProps}>
         {options.map((option) => {
           params.set(queryStringKey, option.value)

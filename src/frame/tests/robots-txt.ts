@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { makeLanguageSurrogateKey } from '@/frame/middleware/set-fastly-surrogate-key'
 import { get } from '@/tests/helpers/e2etest'
 
+// Type alias for the response from e2etest helper
 type TestResponse = {
   body: string
   statusCode: number
@@ -35,6 +36,7 @@ describe('robots.txt', () => {
 
   test('validates robots.txt format', async () => {
     const res: TestResponse = await get('/robots.txt')
+    // Should be valid robots.txt format
     expect(res.body).toMatch(/^User-agent: \*/)
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-type']).toMatch(/text\/plain/)

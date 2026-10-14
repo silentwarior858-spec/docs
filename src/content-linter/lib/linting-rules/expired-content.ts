@@ -2,9 +2,14 @@ import { addError, newLineRe } from 'markdownlint-rule-helpers'
 
 import type { RuleParams, RuleErrorCallback, MarkdownToken, Rule } from '@/content-linter/types'
 
-// Expired ranges wrap content in matching HTML comments:
-// This content <!-- expires yyyy-mm-dd --> expires <!-- end expires yyyy-mm-dd --> here.
-// The closing comment identifies the content to remove with the expired range.
+// This rule looks for opening and closing HTML comment tags that
+// contain an expiration date in the format:
+//
+// This is content <!-- expires yyyy-mm-dd --> that is
+// expired <!-- end expires yyyy-mm-dd --> that does not expire.
+//
+// The `end expires` closing tag closes the content that is expired
+// and must be removed.
 export const expiredContent: Rule = {
   names: ['GHD038', 'expired-content'],
   description: 'Expired content must be remediated.',
@@ -15,6 +20,8 @@ export const expiredContent: Rule = {
     )
 
     for (const token of tokensToCheck) {
+      // Looking for just opening tag with format:
+      // <!-- expires yyyy-mm-dd -->
       const match = token.content?.match(/<!--\s*expires\s(\d\d\d\d)-(\d\d)-(\d\d)\s*-->/)
       if (!match || !token.content) continue
 
@@ -22,7 +29,9 @@ export const expiredContent: Rule = {
       const today = new Date()
       if (today < expireDate) continue
 
-      // Markdownlint reports inline token content by line, so range calculations follow that split.
+      // We want the content split by line since not all token.content is in one line
+      // to get the correct range of the expired content. Below is how markdownlint
+      // grabs the token.content by line.
       const contentByLine = token.content.replace(/^\uFEFF/, '').split(newLineRe)
       const lineOfMatch = contentByLine.findIndex((element) => element.includes(match[0]))
       const startRange = lineOfMatch !== -1 ? contentByLine[lineOfMatch].indexOf(match[0]) + 1 : 1
@@ -41,7 +50,15 @@ export const expiredContent: Rule = {
 
 export const DAYS_TO_WARN_BEFORE_EXPIRED = 14
 
-// Expiring-soon checks the same expires range once the date falls in the warning window.
+// This rule looks for content that will expire in `DAYS_TO_WARN_BEFORE_EXPIRED`
+// days. The rule looks for opening and closing HTML comment tags that
+// contain an expiration date in the format:
+//
+// This is content <!-- expires yyyy-mm-dd --> that is
+// expired <!-- end expires yyyy-mm-dd --> that does not expire.
+//
+// The `end expires` closing tag closes the content that is expired
+// and must be removed.
 export const expiringSoon: Rule = {
   names: ['GHD039', 'expiring-soon'],
   description: 'Content that expires soon should be proactively addressed.',
@@ -52,6 +69,8 @@ export const expiringSoon: Rule = {
     )
 
     for (const token of tokensToCheck) {
+      // Looking for just opening tag with format:
+      // <!-- expires yyyy-mm-dd -->
       const match = token.content?.match(/<!--\s*expires\s(\d\d\d\d)-(\d\d)-(\d\d)\s*-->/)
       if (!match || !token.content) continue
 
@@ -59,7 +78,8 @@ export const expiringSoon: Rule = {
       const today = new Date()
       const futureDate = new Date()
       futureDate.setDate(today.getDate() + DAYS_TO_WARN_BEFORE_EXPIRED)
-      // Skip content that already expired or expires after the warning window.
+      // Don't set warning if the content is already expired or
+      // if the content expires later than the DAYS_TO_WARN_BEFORE_EXPIRED
       if (today > expireDate || expireDate > futureDate) continue
 
       addError(

@@ -14,8 +14,6 @@ contentType: tutorials
 category:
   - Roll Copilot out at scale
   - Manage Copilot for a team
-docsTeamMetrics:
-  - ai-governance
 ---
 
 ## About AI agents on {% data variables.product.github %}

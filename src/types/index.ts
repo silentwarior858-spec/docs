@@ -1,2 +1,2 @@
-// Keep this barrel so existing @/types imports keep working.
+// Re-export all types from types.ts for backward compatibility
 export * from './types'

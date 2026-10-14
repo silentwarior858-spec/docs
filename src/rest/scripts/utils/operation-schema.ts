@@ -1,3 +1,5 @@
+// This schema is used to validate each generated operation object at build time
+
 export default {
   type: 'object',
   required: [
@@ -10,6 +12,7 @@ export default {
     'codeExamples',
   ],
   properties: {
+    // Properties from the source OpenAPI schema that this module depends on
     title: {
       description: 'The title of the operation',
       type: 'string',

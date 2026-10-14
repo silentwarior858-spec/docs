@@ -1,7 +1,12 @@
-// Verifies that OpenAPI files can be decorated successfully.
+// [start-readme]
+//
+// Run this script to check if OpenAPI files can be decorated successfully.
+//
+// [end-readme]
 
 import fs from 'fs'
 import path from 'path'
+import { globSync } from 'glob'
 import { program } from 'commander'
 import { createOperations, processOperations, type SchemaInput } from './utils/get-operations'
 
@@ -19,7 +24,7 @@ program
 
 const filenames: string[] = (program.opts() as ProgramOptions).files
 
-const filesToCheck: string[] = filenames.flatMap((filename: string) => fs.globSync(filename))
+const filesToCheck: string[] = filenames.flatMap((filename: string) => globSync(filename))
 
 if (filesToCheck.length) {
   check(filesToCheck)
@@ -37,7 +42,9 @@ async function check(files: string[]): Promise<void> {
 
   for (const [filename, schema] of documents as [string, unknown][]) {
     try {
+      // munge OpenAPI definitions object in an array of operations objects
       const operations = await createOperations(schema as SchemaInput)
+      // process each operation, asynchronously rendering markdown and stuff
       await processOperations(operations, {})
 
       console.log(`Successfully could decorate OpenAPI operations for document ${filename}`)

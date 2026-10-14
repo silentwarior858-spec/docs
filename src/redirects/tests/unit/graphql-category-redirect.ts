@@ -11,7 +11,8 @@ describe('applyGraphqlCategoryRedirect', () => {
   })
 
   test('rewrites a legacy scalar URL with language prefix', () => {
-    // Built-in GraphQL scalars have no @docsCategory, so they fall into the other bucket.
+    // Boolean is a built-in GraphQL scalar with no @docsCategory, so it falls
+    // to the `other` bucket.
     expect(applyGraphqlCategoryRedirect('/en/graphql/reference/scalars#boolean')).toBe(
       '/en/graphql/reference/other#scalar-boolean',
     )
@@ -30,7 +31,7 @@ describe('applyGraphqlCategoryRedirect', () => {
   })
 
   test('uses the category from the schema map when annotated', () => {
-    // Repository has @docsCategory(name: "repos") in the upstream schema.
+    // `Repository` is annotated with `@docsCategory(name: "repos")` upstream.
     expect(applyGraphqlCategoryRedirect('/en/graphql/reference/objects#repository')).toBe(
       '/en/graphql/reference/repos#object-repository',
     )
@@ -43,7 +44,7 @@ describe('applyGraphqlCategoryRedirect', () => {
   })
 
   test('handles `input-objects` kind segment', () => {
-    // The fpt schema categorizes CustomPropertyValueInput as repos.
+    // CustomPropertyValueInput is categorized as `repos` in the fpt schema.
     expect(
       applyGraphqlCategoryRedirect('/en/graphql/reference/input-objects#custompropertyvalueinput'),
     ).toBe('/en/graphql/reference/repos#input-object-custompropertyvalueinput')

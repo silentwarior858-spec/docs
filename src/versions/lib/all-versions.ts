@@ -2,11 +2,14 @@ import fs from 'fs'
 import type { AllVersions, Version } from '@/types'
 import enterpriseServerReleases from './enterprise-server-releases'
 
-// Version keys combine plan and release, for example enterprise-server@2.21.
+// version = "plan"@"release"
+// example: enterprise-server@2.21
+// where "enterprise-server" is the plan and "2.21" is the release
 const versionDelimiter = '@'
 const latestNonNumberedRelease = 'latest'
 const REST_DATA_META_FILE = 'src/rest/lib/config.json'
 
+// Type for the plan configuration
 interface PlanConfig {
   plan: string
   planTitle: string
@@ -19,29 +22,33 @@ interface PlanConfig {
   miscBaseName: string
 }
 
+// Type for the REST API config file
 interface RestApiConfig {
   'api-versions': {
     [key: string]: string[]
   }
 }
 
-// Versionless redirects try these plans in order. If /foo supports every plan, it
-// stays the Free, Pro, and Team URL. If it supports only Enterprise Cloud and
-// Enterprise Server, src/redirects/lib/permalinks.ts redirects it to
-// /enterprise-cloud@latest/foo.
+// !Explanation of versionless redirect fallbacks!
+// This array is **in order** of the versions the site should try to fall back to if
+// no version is provided in a URL. For example, if /foo refers to a page that is available
+// in all versions, we should not redirect it (because /foo is the correct FPT versioned URL).
+// But if /foo refers to a page that is only available in GHEC and GHES, we should redirect it
+// to /enterprise-cloud@latest/foo (since GHEC comes first in the hierarchy of version fallbacks).
+// The implementation lives in lib/redirects/permalinks.ts.
 const plans: PlanConfig[] = [
   {
-    // free-pro-team is not user-facing.
-    // src/versions/lib/remove-fpt-from-path.ts strips it from URLs.
+    // free-pro-team is **not** a user-facing version and is stripped from URLs.
+    // See lib/remove-fpt-from-path.ts for details.
     plan: 'free-pro-team',
     planTitle: 'Free, Pro, & Team',
     shortName: 'fpt',
     releases: [latestNonNumberedRelease],
     latestRelease: latestNonNumberedRelease,
-    nonEnterpriseDefault: true, // Marks the non-enterprise default independently of the plan name.
+    nonEnterpriseDefault: true, // permanent way to refer to this plan if the name changes
     hasNumberedReleases: false,
-    openApiBaseName: 'fpt', // REST base name.
-    miscBaseName: 'dotcom', // Search index version map base name.
+    openApiBaseName: 'fpt', // used for REST
+    miscBaseName: 'dotcom', // used for GraphQL and webhooks
   },
   {
     plan: 'enterprise-cloud',
@@ -67,6 +74,8 @@ const plans: PlanConfig[] = [
 
 const allVersions: AllVersions = {}
 
+// combine the plans and releases to get allVersions object
+// e.g. free-pro-team@latest, enterprise-server@2.21, enterprise-server@2.20, etc.
 for (const planObj of plans) {
   for (const release of planObj.releases) {
     const version = `${planObj.plan}${versionDelimiter}${release}`
@@ -84,10 +93,8 @@ for (const planObj of plans) {
       miscVersionName: planObj.hasNumberedReleases
         ? `${planObj.miscBaseName}${release}`
         : planObj.miscBaseName,
-      // REST calendar date versions; empty for products without calendar date API versions.
-      apiVersions: [],
-      // Latest REST calendar date version; empty for products without calendar date API versions.
-      latestApiVersion: '',
+      apiVersions: [], // REST Calendar Date Versions, this may be empty for non calendar date versioned products
+      latestApiVersion: '', // Latest REST Calendar Date Version, this may be empty for non calendar date versioned products
       plan: planObj.plan,
       planTitle: planObj.planTitle,
       shortName: planObj.shortName,
@@ -103,7 +110,7 @@ for (const planObj of plans) {
   }
 }
 
-// REST config adds calendar date API versions after the version objects exist.
+// Adds the calendar date (or api versions) to the allVersions object
 const apiVersions: RestApiConfig['api-versions'] = JSON.parse(
   fs.readFileSync(REST_DATA_META_FILE, 'utf8'),
 )['api-versions']
@@ -111,7 +118,7 @@ const apiVersions: RestApiConfig['api-versions'] = JSON.parse(
 for (const key of Object.keys(apiVersions)) {
   const docsVersion = getDocsVersion(key)
   allVersions[docsVersion].apiVersions.push(...apiVersions[key].sort().reverse())
-  // Copy before pop so latestApiVersion does not remove a version from apiVersions.
+  // Create a copy of the array to avoid mutating the original when using pop()
   const sortedVersions = [...apiVersions[key].sort()]
   allVersions[docsVersion].latestApiVersion = sortedVersions.pop() || ''
 }
@@ -125,7 +132,9 @@ export function isApiVersioned(version: string): boolean {
   return allVersions[version] && allVersions[version].apiVersions.length > 0
 }
 
-// OpenAPI names do not match Docs version names, so this maps one to its Docs version.
+// Currently the versions from the OpenAPI do not match the versions on Docs.
+// There is a mapping between the version names. This gets the Docs version from
+// the OpenAPI version name (the filename )
 export function getDocsVersion(openApiVersion: string): string {
   const matchingVersion = Object.values(allVersions).find((version) =>
     openApiVersion.startsWith(version.openApiVersionName),

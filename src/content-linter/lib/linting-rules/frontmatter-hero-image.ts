@@ -10,6 +10,7 @@ interface Frontmatter {
   [key: string]: unknown
 }
 
+// Get the list of valid hero images (without extensions)
 function getValidHeroImages(): string[] {
   const ROOT = process.env.ROOT || '.'
   const heroImageDir = path.join(ROOT, 'assets/images/banner-images')
@@ -20,6 +21,7 @@ function getValidHeroImages(): string[] {
     }
 
     const files = fs.readdirSync(heroImageDir)
+    // Return absolute paths without extensions as they should appear in frontmatter
     return files.map((file) => {
       const baseName = path.basename(file, path.extname(file))
       return `/assets/images/banner-images/${baseName}`
@@ -35,6 +37,7 @@ export const frontmatterHeroImage: Rule = {
     'Hero image paths must be absolute, extensionless, and point to valid images in /assets/images/banner-images/',
   tags: ['frontmatter', 'images'],
   function: (params: RuleParams, onError: RuleErrorCallback) => {
+    // Only check index.md files
     if (!params.name.endsWith('index.md')) return
 
     const fm = getFrontmatter(params.lines) as Frontmatter | null
@@ -42,6 +45,7 @@ export const frontmatterHeroImage: Rule = {
 
     const heroImage = fm.heroImage
 
+    // Check if heroImage is an absolute path
     if (!heroImage.startsWith('/')) {
       const line = params.lines.find((ln: string) => ln.trim().startsWith('heroImage:'))
       const lineNumber = line ? params.lines.indexOf(line) + 1 : 1
@@ -55,6 +59,7 @@ export const frontmatterHeroImage: Rule = {
       return
     }
 
+    // Check if heroImage points to banner-images directory
     if (!heroImage.startsWith('/assets/images/banner-images/')) {
       const line = params.lines.find((ln: string) => ln.trim().startsWith('heroImage:'))
       const lineNumber = line ? params.lines.indexOf(line) + 1 : 1
@@ -68,6 +73,7 @@ export const frontmatterHeroImage: Rule = {
       return
     }
 
+    // Check if the path includes a file extension (which is not allowed)
     if (path.extname(heroImage)) {
       const line = params.lines.find((ln: string) => ln.trim().startsWith('heroImage:'))
       const lineNumber = line ? params.lines.indexOf(line) + 1 : 1
@@ -82,6 +88,7 @@ export const frontmatterHeroImage: Rule = {
       return
     }
 
+    // Check if a file with this base name actually exists
     const validHeroImages = getValidHeroImages()
     if (validHeroImages.length > 0 && !validHeroImages.includes(heroImage)) {
       const line = params.lines.find((ln: string) => ln.trim().startsWith('heroImage:'))

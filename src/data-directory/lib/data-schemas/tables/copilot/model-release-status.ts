@@ -1,3 +1,5 @@
+// This schema enforces the structure in model-release-status.yml
+
 const modelsReleaseStatusSchema = {
   type: 'object',
   additionalProperties: false,

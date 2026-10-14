@@ -8,7 +8,7 @@ describe('article versioning', () => {
   test('only links to articles for fpt', async () => {
     const $: CheerioAPI = await getDOM('/get-started/versioning')
     const links = $('[data-testid="table-of-contents"] a')
-    // /get-started/versioning has one free-pro-team article.
+    // Only 1 link because there's only 1 article available in fpt
     expect(links.length).toBe(1)
     expect(links.attr('href')).toBe('/en/get-started/versioning/only-fpt')
   })
@@ -23,7 +23,7 @@ describe('article versioning', () => {
     expect(second.attr('href')).toBe(
       '/en/enterprise-cloud@latest/get-started/versioning/only-ghec-and-ghes',
     )
-    // Both linked enterprise-cloud articles must resolve without redirects.
+    // Both links should 200 if you go to them
     expect((await head(first.attr('href')!)).statusCode).toBe(200)
     expect((await head(second.attr('href')!)).statusCode).toBe(200)
   })
@@ -38,7 +38,7 @@ describe('article versioning', () => {
     expect(res.statusCode).toBe(404)
   })
   test('going to non-fpt article with fpt prefix will redirect', async () => {
-    // Without the ghec prefix, a ghec-only article redirects to enterprise-cloud.
+    // Viewing a ghec only article without ghec prefix
     const res = await head('/get-started/versioning/only-ghec', {
       followRedirects: false,
     })
@@ -52,12 +52,15 @@ describe('article versioning', () => {
 describe('category versioning', () => {
   test('category page work in all children versions', async () => {
     {
-      // get-started/versioning/index.md deliberately omits fpt, but the category resolves.
+      // Note that in the `versions:` of get-started/versioning/index.md
+      // it *lacks* fpt. It's a deliberate pretend omission/mistake.
+      // But clearly the page works.
       const res = await head('/en/get-started/versioning')
       expect(res.statusCode).toBe(200)
     }
     {
-      // get-started/versioning/index.md omits latest ghes, but it redirects to a number.
+      // The actual version number of get-started/versioning/index.md
+      // does not specify this version of ghes, it still works.
       const res = await head('/en/enterprise-server@latest/get-started/versioning')
       expect(res.statusCode).toBe(302)
       expect(res.headers.location).toMatch(
@@ -65,7 +68,8 @@ describe('category versioning', () => {
       )
     }
     {
-      // get-started/versioning/index.md omits latest ghec, but enterprise-cloud resolves.
+      // The actual version number of get-started/versioning/index.md
+      // does not specify this version of ghec, it still works.
       const res = await head('/en/enterprise-cloud@latest/get-started/versioning')
       expect(res.statusCode).toBe(200)
     }
@@ -74,7 +78,8 @@ describe('category versioning', () => {
 
 describe('home page versioning', () => {
   test('invalid language and valid version', async () => {
-    // Use a numbered release so the invalid language returns 404 before any version redirect.
+    // Don't use 'latest' here because that will trigger a redirect
+    // first to the latest actual number.
     const res = await head(`/ennnnn/enterprise-server@${supported[0]}`)
     expect(res.statusCode).toBe(404)
   })

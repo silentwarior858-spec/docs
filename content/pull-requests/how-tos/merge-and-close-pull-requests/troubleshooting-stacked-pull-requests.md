@@ -9,6 +9,8 @@ category:
   - Merge and close pull requests
 ---
 
+{% data reusables.public-preview.public-preview %}
+
 This article covers common issues you may encounter when working with stacked pull requests and how to resolve them. 
 
 ## A rebase reports a conflict

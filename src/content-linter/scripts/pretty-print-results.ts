@@ -37,9 +37,10 @@ export function prettyPrintResults(
 
   for (const [file, flaws] of Object.entries(results)) {
     console.log(chalk.bold(file))
-    console.log('')
+    console.log('') // blank line
 
-    // Keep repeated rule failures together without losing line-number order within each group.
+    // It's very possible that a the same file has multiple flaws of the
+    // same rule but on different line numbers.
     const sorted = [...flaws]
       .sort((a, b) => a.lineNumber - b.lineNumber)
       .sort((a, b) => a.ruleDescription.localeCompare(b.ruleDescription))
@@ -159,7 +160,7 @@ function chalkFunColors(text: string): string {
 
 function indentWrappedString(str: string, startingIndent: number): string {
   const NEW_LINE_PADDING = ' '.repeat(16)
-  const width = process.stdout.columns || 80 // Default to 80 columns when stdout is not a TTY.
+  const width = process.stdout.columns || 80 // Use terminal width, default to 80 if not available
   let indentedString = ''
   let currentLine = ''
   let isFirstLine = true

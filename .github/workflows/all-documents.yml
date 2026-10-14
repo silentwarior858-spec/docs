@@ -1,6 +1,8 @@
 name: All documents script
 
-# Catches all-documents crashes. This workflow has no output assertions.
+# **What it does**: Verifies that the all-documents script works.
+# **Why we have it**: Code quality and sustainability.
+# **Who does it impact**: docs-engineering
 
 on:
   pull_request:
@@ -36,3 +38,5 @@ jobs:
           echo ""
           echo "Look at the first 50 lines of the file..."
           cat all-documents.json | jq | head -n 50
+
+          # We're essentially expecting it to not crash and fail.

@@ -4,9 +4,7 @@ shortTitle: Estimate price
 intro: Learn how to use the {% data variables.secret-scanning.pricing-calculator %} to estimate the monthly cost of {% data variables.product.prodname_GH_secret_protection %} for your repositories.
 product: '{% data reusables.gated-features.secret-risk-assessment-calculators %}'
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: secret-risk-assessment
 permissions: '{% data reusables.permissions.push-protection-roi-calculator %}'
 contentType: how-tos
 redirect_from:

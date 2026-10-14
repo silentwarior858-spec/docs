@@ -4,8 +4,12 @@ type LinksJSON = Array<{
   product: string
 }>
 
-// Analytics records inline AI-response links and embedding reference links in one JSON payload.
-// The product field lets reports group the most popular sourced references.
+// We use this to generate a JSON string that includes all of the links:
+// 1. Included in the AI response (inline)
+// 2. Used to generate the AI response via an embedding (reference)
+//
+// We include the JSON string in our analytics events so we can see the
+// most popular sourced references, among other things.
 export function generateAISearchLinksJson(
   sourcesBuffer: Array<{ url: string }>,
   aiResponse: string,
@@ -32,8 +36,14 @@ export function generateAISearchLinksJson(
   return JSON.stringify(linksJson)
 }
 
+// Get all links in a markdown text
 function extractMarkdownLinks(markdownResponse: string) {
-  // Example: [Actions](https://docs.github.com/actions) yields the URL.
+  // This regex matches markdown links of the form [text](url)
+  // Explanation:
+  // \[([^\]]+)\]   : Matches the link text inside square brackets (one or more non-']' characters).
+  // \(             : Matches the opening parenthesis.
+  // ([^)]+)        : Captures the URL (one or more characters that are not a closing parenthesis).
+  // \)             : Matches the closing parenthesis.
   const regex = /\[([^\]]+)\]\(([^)]+)\)/g
 
   const urls = []
@@ -43,6 +53,7 @@ function extractMarkdownLinks(markdownResponse: string) {
     urls.push(match[2])
   }
 
+  // Filter out any invalid URLs
   return urls.filter((url) => {
     try {
       new URL(url)
@@ -54,6 +65,7 @@ function extractMarkdownLinks(markdownResponse: string) {
   })
 }
 
+// Given a Docs URL, extract the product name
 function extractProductFromDocsUrl(url: string): string {
   const urlObject = new URL(url)
   if (urlObject.hostname !== 'docs.github.com') {
@@ -63,7 +75,8 @@ function extractProductFromDocsUrl(url: string): string {
 
   const segments = pathname.split('/').filter((segment) => segment)
 
-  // This heuristic treats only two-character locale prefixes as localized paths.
+  // If the first segment is a language code (2 characters), then product is the next segment.
+  // Otherwise, assume the first segment is the product.
   if (segments.length === 0) {
     return ''
   }
@@ -72,7 +85,7 @@ function extractProductFromDocsUrl(url: string): string {
     if (segments.length < 2) {
       return ''
     }
-    // Versioned paths put the product after the version segment.
+    // if second segment is a version, then product is the third segment
     if (segments[1].includes('@')) {
       return segments[2] || ''
     }

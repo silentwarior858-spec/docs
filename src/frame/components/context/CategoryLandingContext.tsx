@@ -32,7 +32,8 @@ export const useCategoryLandingContext = (): CategoryLandingContextT => {
   return context
 }
 
-// Context extraction uses Record<string, unknown> because Page omits runtime-computed properties.
+// Request type for context extraction — uses Record<string, unknown> for the page
+// because the Page type doesn't include all runtime-computed properties.
 interface ContextRequest {
   context: {
     page: Record<string, unknown> & { title: string; intro: string }
@@ -66,7 +67,8 @@ export const getCategoryLandingContextFromRequest = (
     featuredLinks: getFeaturedLinksFromReq(req),
     renderedPage: (req.context.renderedPage as string) || '',
     currentLayout: req.context.currentLayoutName || '',
-    // getServerSideProps cannot serialize undefined, so omit absent frontmatter fields.
+    // `getServerSideProps` cannot serialize `undefined`, so only include these
+    // when they are actually defined on the page frontmatter.
     ...(spotlight !== undefined && { spotlight }),
     ...(filters !== undefined && { filters }),
   }

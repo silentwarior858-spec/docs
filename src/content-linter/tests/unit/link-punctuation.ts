@@ -8,7 +8,8 @@ describe(linkPunctuation.names.join(' - '), () => {
     const markdown = [
       '[This should pass](./image.png)',
       '[AUTOTITLE](./image.png)',
-      // The rule allows imperfect descriptions when their punctuation is valid.
+      // These are not necessarily good descriptions, but they are valid
+      // per the requirements of the rule
       "[A link with end quote'](./image.png)",
       '["A link with start quote](./image.png)',
       '[A link with a question mark?](./image.png)',

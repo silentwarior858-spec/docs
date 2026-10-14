@@ -1,7 +1,12 @@
 #!/usr/bin/env tsx
 
-// Combines per-version reports so one target broken in many versions appears once.
-// Deduplication keeps the Markdown report under the issue body limit.
+/**
+ * Combine every version's link report into one deduplicated Markdown report.
+ *
+ * The workflow used to `cat` each version's rendered Markdown together, so a link broken in
+ * every version produced an identical section per version. That multiplied the report by the
+ * size of the matrix and pushed it past the issue body limit, where it got truncated.
+ */
 
 import fs from 'fs'
 import path from 'path'
@@ -13,7 +18,7 @@ import {
   type LinkReport,
 } from '@/links/lib/link-report'
 
-// Example: link-report-free-pro-team@latest-en.json -> free-pro-team@latest en
+// `link-report-free-pro-team@latest-en.json` -> `free-pro-team@latest en`
 const REPORT_FILE = /^link-report-(.+)-([a-z]{2})\.json$/
 
 interface VersionedReport {

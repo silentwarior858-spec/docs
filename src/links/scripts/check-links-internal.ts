@@ -1,13 +1,22 @@
-// Checks all internal links across all versions and languages on a schedule.
-// Usage: npm run check-links-internal
-// Usage: npm run check-links-internal -- --version free-pro-team@latest --language en
-// VERSION sets the version to check, for example free-pro-team@latest.
-// LANGUAGE sets the language to check, default en.
-// GITHUB_TOKEN creates issue reports.
-// ACTION_RUN_URL links to the action run.
-// CREATE_REPORT creates an issue report when true, default false.
-// REPORT_REPOSITORY sets the repository for report issues.
-// CHECK_ANCHORS controls anchor link checks, default true.
+/**
+ * Internal Link Checker
+ *
+ * Comprehensive check of all internal links across all versions and languages.
+ * Designed to run as a scheduled workflow (twice weekly).
+ *
+ * Usage:
+ *   npm run check-links-internal
+ *   npm run check-links-internal -- --version free-pro-team@latest --language en
+ *
+ * Environment variables:
+ *   VERSION - Version to check (e.g., free-pro-team@latest)
+ *   LANGUAGE - Language to check (e.g., en)
+ *   GITHUB_TOKEN - For creating issue reports
+ *   ACTION_RUN_URL - Link to the action run
+ *   CREATE_REPORT - Whether to create an issue report (default: false)
+ *   REPORT_REPOSITORY - Repository to create report issues in
+ *   CHECK_ANCHORS - Whether to check anchor links (default: true)
+ */
 
 import fs from 'fs'
 import os from 'os'
@@ -47,6 +56,7 @@ import { getFeaturesByVersion } from '@/versions/middleware/features'
 import type { Page, Permalink, Context } from '@/types'
 import * as coreLib from '@actions/core'
 
+// Create a set for fast lookups of excluded links
 const excludedLinksSet = new Set(excludedLinks.map(({ is }) => is).filter(Boolean))
 const excludedLinksPrefixes = excludedLinks.map(({ startsWith }) => startsWith).filter(Boolean)
 
@@ -62,8 +72,15 @@ interface CheckResult {
   totalLinksChecked: number
 }
 
-// page.markdown has frontmatter stripped, so source positions need the raw-file offset.
-// Cache by fullPath so each page file is read once for link and anchor checks.
+/**
+ * Count how many lines the frontmatter block occupies in the raw source file.
+ * `page.markdown` has frontmatter stripped, so line numbers from markdown
+ * parsing are relative to the body. Adding this offset converts them to
+ * actual file line numbers.
+ *
+ * Results are cached by fullPath — the file is read once per page across
+ * both getLinksFromMarkdown() and checkAnchorsOnPage().
+ */
 const frontmatterLineOffsetCache = new Map<string, number>()
 
 function getFrontmatterLineOffset(fullPath: string): number {
@@ -77,24 +94,31 @@ function getFrontmatterLineOffset(fullPath: string): number {
       const lines = raw.split('\n')
       for (let i = 1; i < lines.length; i++) {
         if (lines[i].trimEnd() === '---') {
-          // Offset points body links at their raw-file source positions.
+          // i is the 0-based index of the closing `---`; adding 1 gives the
+          // 1-based line number of that delimiter, which is the total number
+          // of frontmatter lines. Body content starts on the next line.
           offset = i + 1
           break
         }
       }
     }
   } catch {
-    // Fall back to no offset when the raw file cannot be read.
+    // ignore — fall back to no offset
   }
 
   frontmatterLineOffsetCache.set(fullPath, offset)
   return offset
 }
 
-// Extract links from Liquid-rendered content, then map each one to the raw Markdown source.
-// Raw source positions avoid drift from Liquid post-processing, such as blank-line collapsing.
-// Example: /{% ifversion fpt %}enterprise-cloud@latest/{% endif %}/path renders before lookup.
-// Reusable-origin links fall back to 0 because this file has no matching source position.
+/**
+ * Extract all internal links from the markdown source with accurate line numbers.
+ *
+ * Links are discovered from the Liquid-rendered content (which expands {% data reusables.xxx %}
+ * and respects {% ifversion %} for the current version), so coverage matches the original
+ * HTML-based checker. Line numbers are resolved against the raw markdown source to avoid
+ * drift caused by Liquid post-processing (blank-line collapsing). Links that originate
+ * from a reusable file rather than the page itself fall back to line 0.
+ */
 async function getLinksFromMarkdown(
   page: Page,
   context: Context,
@@ -103,7 +127,13 @@ async function getLinksFromMarkdown(
 ): Promise<{ href: string; text: string | undefined; line: number; fragment?: string }[]> {
   const fmOffset = getFrontmatterLineOffset(page.fullPath)
 
-  // Render Liquid hrefs before keying the map so raw and rendered extraction use the same href.
+  // Build a map of raw-markdown line numbers per href, plus a parallel index
+  // map to consume them in encounter order without shifting (O(1) per lookup).
+  //
+  // When a raw href contains Liquid tags (e.g. `/{% ifversion fpt %}enterprise-cloud@latest/{% endif %}/path`),
+  // the rendered href will differ from the raw string, so rawLinesByHref.get() would miss.
+  // To fix this, we lazily import renderLiquid once and use it to resolve those hrefs to
+  // their canonical (rendered) form before keying the map — matching what extractLinksWithLiquid produces.
   const rawResult = precomputedRawResult ?? extractLinksFromMarkdown(page.markdown)
 
   const needsLiquidHrefResolution =
@@ -121,10 +151,11 @@ async function getLinksFromMarkdown(
     let canonicalHref = link.href
     if (renderLiquidFn && (canonicalHref.includes('{%') || canonicalHref.includes('{{'))) {
       try {
-        // Render only the href so Liquid changes do not shift raw source positions.
+        // Render only the href string so we get the same canonical href that
+        // extractLinksWithLiquid will produce, without affecting line positions.
         canonicalHref = (await renderLiquidFn(canonicalHref, context)).trim()
       } catch {
-        // Keep the raw href when Liquid rendering fails.
+        // fall back to raw href if rendering fails
       }
     }
     const existing = rawLinesByHref.get(canonicalHref)
@@ -135,7 +166,9 @@ async function getLinksFromMarkdown(
     }
   }
 
-  // Render Liquid-prefixed hrefs because the raw extractor only treats leading slashes as internal paths.
+  // Liquid-prefixed links (href starts with `{%`) are absent from internalLinks because
+  // INTERNAL_LINK_PATTERN requires a leading '/'. Render each href to its canonical form
+  // and, if the result is an internal path, add it to the map so lookups don't miss.
   if (renderLiquidFn) {
     for (const link of rawResult.liquidPrefixedLinks) {
       try {
@@ -149,14 +182,17 @@ async function getLinksFromMarkdown(
           }
         }
       } catch {
-        // Skip links with no resolvable source position.
+        // skip — can't resolve line number for this link
       }
     }
   }
-  // Track repeated hrefs so each rendered occurrence gets the next raw source position.
+  // Tracks how many line numbers have been consumed for each href.
   const rawLinesIndex = new Map<string, number>()
 
-  // The Liquid-rendered set controls checks; extractLinksWithLiquid handles render failures.
+  // The Liquid-rendered set drives which links are actually checked (expands
+  // reusables, excludes version-gated links that don't apply here).
+  // extractLinksWithLiquid already catches Liquid render failures internally and
+  // falls back to raw extraction with a warning, so no outer try/catch is needed.
   const renderedResult = prerenderedResult ?? (await extractLinksWithLiquid(page.markdown, context))
   const renderedLinks = renderedResult.internalLinks.map((l) => ({
     href: l.href,
@@ -173,8 +209,16 @@ async function getLinksFromMarkdown(
   })
 }
 
-// Check same-page anchors with Liquid-rendered headings and github-slugger, matching the live site.
-// checkPage shares headingIds with cross-page validation, so this only checks same-page fragments.
+/**
+ * Check anchor links on a page using fast heading ID computation from Liquid-rendered
+ * markdown. Avoids the expensive full HTML render previously used.
+ *
+ * Uses github-slugger (the same library as rehype-slug in the render pipeline) to compute
+ * heading anchor IDs, producing results that match the live site.
+ *
+ * `headingIds` is precomputed once per page in checkPage and shared with the cross-page
+ * anchor cache, so this function only checks same-page (`#fragment`) links here.
+ */
 function checkAnchorsFromHeadings(
   page: Page,
   rawResult: LinkExtractionResult,
@@ -183,7 +227,7 @@ function checkAnchorsFromHeadings(
 ): BrokenLink[] {
   const fmOffset = getFrontmatterLineOffset(page.fullPath)
 
-  // Raw source positions point same-page anchor flaws at the file a writer edits.
+  // Build line-number map from the raw (pre-Liquid) source for accurate file line numbers.
   const anchorLineMap = new Map<string, number>()
   for (const link of rawResult.anchorLinks) {
     if (!anchorLineMap.has(link.href)) {
@@ -191,7 +235,8 @@ function checkAnchorsFromHeadings(
     }
   }
 
-  // Check only anchors that survive Liquid version gates.
+  // Check only the anchor links that actually appear in the Liquid-rendered output
+  // (respects {% ifversion %} gates — links in non-applicable blocks are not checked).
   const brokenAnchors: BrokenLink[] = []
   for (const link of renderedResult.anchorLinks) {
     const { href } = link
@@ -210,7 +255,10 @@ function checkAnchorsFromHeadings(
   return brokenAnchors
 }
 
-// Each page gets its own context object, so concurrent checks cannot share mutable page state.
+/**
+ * Process a single page: extract links, validate them, and optionally check anchors.
+ * Receives its own context object so it is safe to run concurrently with other pages.
+ */
 async function checkPage(
   page: Page,
   permalink: Permalink,
@@ -231,13 +279,19 @@ async function checkPage(
 
   const rawMarkdownLinks = extractLinksFromMarkdown(page.markdown)
 
-  // Share one Liquid render between link extraction and anchor checks.
+  // Render through Liquid once; share the result between link extraction and anchor
+  // checking to avoid paying the Liquid render cost twice per page.
   const { renderedMarkdown, result: renderedLinkResult } = await renderAndExtractLinks(
     page.markdown,
     pageContext,
   )
 
-  // REST, GraphQL, and webhook pages use OpenAPI operation IDs, so cache only Markdown headings.
+  // Compute this page's heading anchor IDs once from the Liquid-rendered markdown.
+  // Autogenerated pages (REST/GraphQL/webhooks) derive their anchors from OpenAPI
+  // operation IDs, not markdown headings, so we can't compute them here — leave them
+  // out of the cache so links into them are never flagged (they resolve at runtime).
+  // Skip the work entirely when anchor checking is disabled: nothing downstream reads
+  // the heading cache in that mode.
   const headingIds =
     options.checkAnchors && !page.autogenerated ? computeHeadingIds(renderedMarkdown) : null
 
@@ -246,6 +300,7 @@ async function checkPage(
   for (const link of links) {
     if (isExcludedLink(link.href)) continue
 
+    // Check if this is an asset link (images, etc.) - verify file exists on disk
     if (isAssetLink(link.href)) {
       if (!checkAssetLink(link.href)) {
         brokenLinks.push({
@@ -285,7 +340,9 @@ async function checkPage(
         requiresVersionContext: result.requiresVersionContext,
       })
     } else if (options.checkAnchors && link.fragment) {
-      // Defer cross-page fragments until this version finishes; some targets have no cache entry.
+      // Direct (non-redirect) hit with a fragment: defer a cross-page anchor check.
+      // We can't validate it now because the target page may not have been rendered
+      // yet, so collect it and validate after the whole version finishes.
       const targetKey = resolveInternalLinkKey(
         link.href,
         pageMap,
@@ -318,9 +375,10 @@ async function checkPage(
   return { brokenLinks, redirectLinks, linksChecked: links.length, headingIds, crossPageAnchors }
 }
 
-// checkVersion renders every page before validating cross-page anchors.
-// Target pages may not have cached headings when an earlier page links to them.
-// Skip targets outside this run; the scheduled matrix does not cover every version.
+/**
+ * Check all pages for a given version and language, processing pages concurrently
+ * up to `concurrency` at a time.
+ */
 async function checkVersion(
   version: string,
   language: string,
@@ -334,6 +392,7 @@ async function checkVersion(
     throw new Error(`Unknown version: ${version}`)
   }
 
+  // Filter pages for this version and language
   const relevantPages = pageList.filter((page) => {
     if (page.languageCode !== language) return false
     if (!page.applicableVersions?.includes(version)) return false
@@ -344,7 +403,8 @@ async function checkVersion(
     `  Checking ${relevantPages.length} pages for ${version}/${language} (concurrency: ${options.concurrency})`,
   )
 
-  // Give each page a shallow context copy so concurrent workers do not share mutable page state.
+  // Build a base context once per version — feature flags and version info are the same for all pages.
+  // Each page gets a shallow copy so concurrent tasks don't share the mutable `page` property.
   const baseContext = {
     currentVersion: version,
     currentLanguage: language,
@@ -360,10 +420,19 @@ async function checkVersion(
   let totalPagesChecked = 0
   let totalLinksChecked = 0
 
+  // Cross-page anchor validation is a two-pass process within the version:
+  //   pass 1 — render every page, caching its heading IDs and collecting the
+  //            cross-page anchor links it contains (target may not be rendered yet)
+  //   pass 2 — after all pages are rendered, validate each collected anchor against
+  //            the now-complete heading cache
+  // The cache is keyed by pageMap key (lang + version + path). A link whose target
+  // resolves to a different version isn't in this run's cache and is skipped here;
+  // it's validated when the workflow runs the checker for that target version.
   const headingIdsByPageKey = new Map<string, Set<string>>()
   const pendingCrossPageAnchors: PendingCrossPageAnchor[] = []
 
-  // All workers drain a shared iterator, so bounded concurrency never processes a page twice.
+  // Bounded concurrency: process up to `options.concurrency` pages simultaneously.
+  // All workers drain from the same shared iterator — no page is processed twice.
   const queue = relevantPages.entries()
 
   async function worker() {
@@ -371,7 +440,8 @@ async function checkVersion(
       const permalink = page.permalinks?.find((p) => p.pageVersion === version)
       if (!permalink) continue
 
-      // Each worker gets a context copy with its own page; pageMap and redirects are read-only.
+      // Each concurrent task gets its own context copy with the page set.
+      // pageMap and redirects are read-only and safe to share.
       const pageContext = { ...baseContext, page } as Context
 
       const result = await checkPage(page, permalink, pageContext, pageMap, redirects, {
@@ -380,7 +450,8 @@ async function checkVersion(
         language,
       })
 
-      // JS runs between awaits without interleaving another worker's array pushes.
+      // Merging results here is safe: JS is single-threaded so array pushes
+      // between await points cannot interleave with another worker's pushes.
       allBrokenLinks.push(...result.brokenLinks)
       allRedirectLinks.push(...result.redirectLinks)
       if (result.headingIds) headingIdsByPageKey.set(permalink.href, result.headingIds)
@@ -396,9 +467,10 @@ async function checkVersion(
     }
   }
 
+  // Launch `concurrency` workers that all drain from the same shared queue iterator.
   await Promise.all(Array.from({ length: options.concurrency }, worker))
 
-  // Validate cross-page anchors after every page has cached its headings.
+  // Pass 2: validate cross-page anchors now that every page's headings are cached.
   if (options.checkAnchors) {
     allBrokenLinks.push(...validateCrossPageAnchors(pendingCrossPageAnchors, headingIdsByPageKey))
   }
@@ -411,6 +483,9 @@ async function checkVersion(
   }
 }
 
+/**
+ * Main entry point
+ */
 async function main() {
   program
     .name('check-links-internal')
@@ -433,6 +508,7 @@ async function main() {
   console.log(chalk.blue('🔗 Internal Link Checker'))
   console.log('')
 
+  // Determine version and language to check
   const version = options.version || process.env.VERSION
   const language = options.language || process.env.LANGUAGE || 'en'
   const checkAnchors = options.checkAnchors && process.env.CHECK_ANCHORS !== 'false'
@@ -460,11 +536,13 @@ async function main() {
   console.log(`Check anchors: ${checkAnchors}`)
   console.log('')
 
+  // Load page data
   console.log('Loading page data...')
   const { pages: pageMap, redirects, pageList } = await warmServer([language])
   console.log(`Loaded ${pageList.length} pages, ${Object.keys(redirects).length} redirects`)
   console.log('')
 
+  // Run the check
   const concurrency = Math.max(1, parseInt(process.env.CONCURRENCY || options.concurrency, 10))
   const result = await checkVersion(version, language, pageList, pageMap, redirects, {
     checkAnchors,
@@ -472,6 +550,7 @@ async function main() {
     concurrency,
   })
 
+  // Report results
   const duration = ((Date.now() - startTime) / 1000).toFixed(1)
   console.log('')
   console.log(
@@ -487,6 +566,7 @@ async function main() {
     process.exit(0)
   }
 
+  // Generate report
   const report = generateInternalLinkReport(allBrokenLinks, {
     actionUrl: process.env.ACTION_RUN_URL,
     version,
@@ -498,10 +578,12 @@ async function main() {
   console.log(chalk.red(`❌ ${result.brokenLinks.length} broken link(s)`))
   console.log(chalk.yellow(`⚠️  ${result.redirectLinks.length} redirect(s) to update`))
 
+  // Write artifact
   const markdown = reportToMarkdown(report)
   await uploadArtifact(`link-report-${version}-${language}.md`, markdown)
   await uploadArtifact(`link-report-${version}-${language}.json`, JSON.stringify(report, null, 2))
 
+  // Create issue report if configured
   const createReport = process.env.CREATE_REPORT === 'true'
   const reportRepository = process.env.REPORT_REPOSITORY || 'github/docs-content'
 
@@ -522,6 +604,7 @@ async function main() {
       reportLabel,
     })
 
+    // Link to previous reports
     await linkReports({
       core: coreLib,
       octokit,
@@ -534,7 +617,8 @@ async function main() {
     console.log(`Created report issue: ${newReport.html_url}`)
   }
 
-  // Avoid a failing exit code; report issues notify docs-content, while failures only notify docs-alerts.
+  // Don't exit with error - the issue report is the mechanism for docs-content to act on broken links
+  // Exiting with error would trigger docs-alerts which only engineering monitors
   console.log('')
   console.log(
     chalk.yellow(
@@ -543,6 +627,7 @@ async function main() {
   )
 }
 
+// Run if invoked directly
 ;(async () => {
   try {
     await main()

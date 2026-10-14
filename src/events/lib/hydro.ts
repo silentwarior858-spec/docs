@@ -11,9 +11,9 @@ const logger = createLogger(import.meta.url)
 const TIME_OUT_TEXT = 'ms has passed since batch creation'
 const SERVER_DISCONNECT_TEXT = 'The server disconnected before a response was received'
 const X_HYDRO_APP = 'docs-production'
-const CLUSTER = 'potomac' // Docs can publish externally only to the Potomac cluster.
-const TIMEOUT = MAX_REQUEST_TIMEOUT - 1000 // Express terminates at MAX_REQUEST_TIMEOUT.
-const RETRIES = 0 // Aggregate statistics can tolerate a few dropped events.
+const CLUSTER = 'potomac' // We only have ability to publish externally to potomac cluster
+const TIMEOUT = MAX_REQUEST_TIMEOUT - 1000 // Limit because Express will terminate at MAX_REQUEST_TIMEOUT
+const RETRIES = 0 // We care about aggregate statistics; a few dropped events isn't a big deal
 const { NODE_ENV, HYDRO_SECRET, HYDRO_ENDPOINT } = process.env
 const inProd = NODE_ENV === 'production'
 
@@ -41,12 +41,13 @@ async function _publish(
     events: events.map(({ schema, value }) => ({
       cluster: CLUSTER,
       schema,
-      value: JSON.stringify(value), // Hydro requires the value property to be double-encoded.
+      value: JSON.stringify(value), // We must double-encode the value property
     })),
   })
   const token = createHmac('sha256', secret).update(requestBody).digest('hex')
 
-  // Native fetch cannot use custom HTTPS agents; use undici.fetch for keepAlive or maxSockets.
+  // Note: Custom HTTPS agent (keepAlive, maxSockets) not supported with native fetch
+  // Consider using undici.fetch() if custom agent behavior is critical
   const response = await fetchWithRetry(
     endpoint,
     {
@@ -69,7 +70,7 @@ async function _publish(
 
   statsd.increment('hydro.response_code.all', 1, [`response_code:${statusCode}`])
 
-  // Report eligible 3xx and 4xx responses to Failbot in production; Docs monitors 5xx separately.
+  // Track 3xx and 4xx in Sentry; 5xx is tracked separately from the Docs project
   if (
     statusCode >= 300 &&
     statusCode < 500 &&
@@ -84,6 +85,7 @@ async function _publish(
         body,
         requestBody,
       })
+      // Report the error to Failbot
       report(error, { statusCode, body, requestBody })
     } else {
       throw error

@@ -2,9 +2,7 @@
 title: Setting up Dependabot to run on github-hosted action runners using the Azure Private Network
 intro: You can configure an Azure Virtual Network (VNET) to run {% data variables.product.prodname_dependabot %} on {% data variables.product.company_short %}-hosted runners.
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: dependabot-vnet-support
 permissions: '{% data reusables.permissions.dependabot-various-tasks %}'
 allowTitleToDifferFromFilename: true
 shortTitle: Configure VNET

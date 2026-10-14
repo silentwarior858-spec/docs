@@ -12,7 +12,6 @@ children:
   - /openid-connect
   - /artifact-attestations
   - /script-injections
-  - /workflow-dependency-lockfiles
   - /compromised-runners
   - /kubernetes-admissions-controller
 contentType: concepts

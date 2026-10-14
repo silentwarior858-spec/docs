@@ -3,9 +3,7 @@ title: About the issue type field
 shortTitle: About the issue type field
 intro: You can show the type of the issue in your projects.
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: issue-types
 contentType: tutorials
 category:
   - Manage project items and fields

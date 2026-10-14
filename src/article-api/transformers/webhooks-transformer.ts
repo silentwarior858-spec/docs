@@ -5,6 +5,10 @@ import { fastTextOnly } from '@/content-render/unified/text-only'
 import { loadTemplate } from '@/article-api/lib/load-template'
 import matter from '@gr2m/gray-matter'
 
+/**
+ * Transformer for Webhooks pages.
+ * Converts webhook events and payloads into markdown format using a Liquid template.
+ */
 export class WebhooksTransformer implements PageTransformer {
   templateName = 'webhooks-page.template.md'
 
@@ -13,15 +17,19 @@ export class WebhooksTransformer implements PageTransformer {
   }
 
   async transform(page: Page, pathname: string, context: Context): Promise<string> {
-    // Dynamic import avoids circular dependencies.
+    // Import getInitialPageWebhooks dynamically to avoid circular dependencies
     const { getInitialPageWebhooks } = await import('@/webhooks/lib/index')
 
+    // Extract version from context
     const currentVersion = context.currentVersion!
 
+    // Get the webhook data
     const webhooksData = await getInitialPageWebhooks(currentVersion)
 
+    // Prepare page intro
     const intro = page.intro ? await page.renderProp('intro', context, { textOnly: true }) : ''
 
+    // Prepare manual content
     let manualContent = ''
     if (page.markdown) {
       const { content } = matter(page.markdown)
@@ -40,7 +48,7 @@ export class WebhooksTransformer implements PageTransformer {
       }
     }
 
-    // Omit payload examples so the generated webhook page stays compact.
+    // Prepare webhooks data for template (payload examples are omitted to save space)
     const preparedWebhooks = webhooksData.map((webhook) => ({
       name: webhook.name,
       actionTypes: webhook.actionTypes,
@@ -57,7 +65,7 @@ export class WebhooksTransformer implements PageTransformer {
       })),
     }))
 
-    // Common body parameters appear in at least 60 percent of webhooks.
+    // Identify common body parameters that appear in most webhooks
     const paramCounts = new Map<string, number>()
     for (const webhook of preparedWebhooks) {
       for (const param of webhook.bodyParameters) {
@@ -69,7 +77,7 @@ export class WebhooksTransformer implements PageTransformer {
       [...paramCounts.entries()].filter(([, count]) => count >= threshold).map(([name]) => name),
     )
 
-    // Omit high-frequency body parameters from rows; summarize matches from the first webhook.
+    // Remove common params from each webhook and collect them for summary
     const commonParams =
       preparedWebhooks[0]?.bodyParameters.filter((p: { name: string }) =>
         commonParamNames.has(p.name),
@@ -80,6 +88,7 @@ export class WebhooksTransformer implements PageTransformer {
       )
     }
 
+    // Prepare template data
     const templateData: Record<string, unknown> = {
       page: {
         title: page.title,
@@ -90,6 +99,7 @@ export class WebhooksTransformer implements PageTransformer {
       commonParams,
     }
 
+    // Load and render template
     const templateContent = loadTemplate(this.templateName)
 
     return await renderContent(templateContent, {

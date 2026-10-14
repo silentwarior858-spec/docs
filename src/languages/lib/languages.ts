@@ -1,8 +1,11 @@
-// When adding a language, also update CDN accept-language handling.
-// src/languages/tests/files.ts validates each entry.
+// See also languages-schema.ts
+// Nota bene: If you are adding a new language,
+// change accept-language handling in CDN config as well.
 
-// Client-safe definitions avoid fs and path; server code that needs directories
-// imports languages-server.ts.
+/**
+ * Client-safe language definitions without server-side dependencies.
+ * For server-side usage with fs/path operations, import from './languages-server.ts'
+ */
 
 export type LanguageCode = 'en' | 'es' | 'ja' | 'pt' | 'zh' | 'ru' | 'fr' | 'ko' | 'de'
 export type LocaleCode =
@@ -25,8 +28,8 @@ export interface Language {
   redirectPatterns?: RegExp[]
   dir?: string
   // The earliest archived GHES version that includes this language.
-  // Use it to short-circuit requests for translations missing from older archives.
-  // English has no value because every archive includes it.
+  // Used to short-circuit requests for translations that don't exist
+  // in a given archive. English is always available so it has no value.
   firstArchivedVersion?: string
 }
 
@@ -34,8 +37,8 @@ export interface Languages {
   [code: string]: Language
 }
 
-// Order languages by accept-language header frequency. Omit dir because path
-// resolution needs server-only modules.
+// Languages in order of accept-language header frequency
+// Note: 'dir' is omitted here as it requires server-side path resolution
 export const languages: Languages = {
   en: {
     name: 'English',

@@ -1,4 +1,4 @@
-import cx from 'clsx'
+import cx from 'classnames'
 
 import { Survey } from '@/events/components/Survey'
 import { Contribution } from '@/frame/components/page-footer/Contribution'
@@ -10,8 +10,8 @@ import { useTranslation } from '@/languages/components/useTranslation'
 
 import styles from './SupportSection.module.scss'
 
-// MinimalFooter's centerComponent slot supplies no page container or visible heading,
-// so this region owns its column chrome.
+// Renders inside MinimalFooter's `centerComponent` slot, so it no longer owns a page
+// container or a section heading — the footer supplies that chrome.
 //
 // Columns carry their own class rather than relying on nth-child, because any of the
 // three can be hidden (site-policy pages drop the survey, non-English drops the
@@ -35,7 +35,9 @@ export const SupportSection = () => {
 
   return (
     <>
-      {/* Keep this hidden h2 so heading navigation has a parent for the column headings. */}
+      {/* The design shows no heading over this region, but dropping it entirely
+          leaves the three column headings with nothing above them for heading
+          navigation. Kept for assistive tech only. */}
       <h2 className="visually-hidden">{t('support_heading')}</h2>
       <div className={cx('no-print', styles.supportGrid)}>
         {showSurvey && (

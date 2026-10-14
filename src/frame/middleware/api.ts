@@ -23,8 +23,12 @@ router.use('/anchor-redirect', anchorRedirect)
 router.use('/pagelist', pageList)
 router.use('/article', article)
 
-// Local development proxies AI Search to docs.github.com when CSE_COPILOT_ENDPOINT
-// is unset, so writers do not need a local AI Search service.
+// The purpose of this is for convenience to everyone who runs this code
+// base locally but don't have an Elasticsearch server locally.
+// In production, this env var is always set but perhaps in a writer's
+// local laptop, they don't have an Elasticsearch. Neither a running local
+// server or the known credentials to a remote Elasticsearch. Whenever
+// that's the case, they can just HTTP proxy to the production server.
 if (process.env.CSE_COPILOT_ENDPOINT || process.env.NODE_ENV === 'test') {
   router.use('/ai-search', aiSearch)
 } else {
@@ -48,8 +52,9 @@ if (process.env.ELASTICSEARCH_URL) {
   )
 }
 
-// Browser JavaScript cannot read github.com httpOnly cookies.
-// The server endpoint returns the staff flag that client code needs.
+// We need access to specific httpOnly cookies set on github.com from the client
+// The only way to access these on the client is to fetch them from the server
+// Limit this endpoint to 1req/min because a client should only call this route once
 router.get('/cookies', (req, res) => {
   noCacheControl(res)
   const cookies = {
@@ -58,6 +63,7 @@ router.get('/cookies', (req, res) => {
   res.json(cookies)
 })
 
+// Handle root /api requests
 router.get('/', (req, res) => {
   res.status(404).json({ error: `${req.path} not found` })
 })

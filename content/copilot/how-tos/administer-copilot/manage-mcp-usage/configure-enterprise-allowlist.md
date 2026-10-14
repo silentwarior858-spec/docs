@@ -10,8 +10,6 @@ contentType: how-tos
 category:
   - Configure Copilot
   - Manage Copilot for a team
-docsTeamMetrics:
-  - ai-governance
 ---
 
 ## About allowlists

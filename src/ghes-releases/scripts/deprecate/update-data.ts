@@ -31,10 +31,12 @@ export function updateDataFiles() {
   updateFeatureData()
 }
 
-// Remove empty reusable files and their Liquid references so content does not use deleted data.
+// Removes empty data/reusables files and removes the deleted
+// reusable from any content or data/reusables files that reference it.
 function updateReusableData() {
   const deletedDataFiles = []
 
+  // Remove empty reusables
   for (const file of dataReusables) {
     const oldContents = fs.readFileSync(file, 'utf8').trim()
     if (oldContents === '') {
@@ -43,12 +45,16 @@ function updateReusableData() {
       deletedDataFiles.push(file)
     }
   }
-  // Example: data/reusables/actions/runner.md becomes {% data reusables.actions.runner %}.
+  // Map the format:
+  // data/reusables/actions/actions-runner-controller-unsupported-customization.md
+  // to the format:
+  // {% data reusables.code-scanning.beta-org-enable-all %}
   const reusableNames = deletedDataFiles.map(
     (file) => `{% data ${file.replace('.md', '').split('/').slice(1).join('.')} %}`,
   )
   const existingDataReusables = difference(dataReusables, deletedDataFiles)
 
+  // Remove deleted reusables from content and data resuables files
   for (const file of [...existingDataReusables, ...contentFiles]) {
     const originalContent = fs.readFileSync(file, 'utf8')
     let content = originalContent
@@ -65,7 +71,10 @@ function updateReusableData() {
   }
 }
 
-// Lists all-version data/features for human review during GHES deprecation.
+// Removes deprecated data/feature files and outputs a list
+// of data/features available in all versions - this list
+// is currently only used used for reviewing purposes when
+// deprecating a GHES release
 function updateFeatureData() {
   const allFeatureFiles = new Set()
 

@@ -7,6 +7,8 @@ import {
 } from '@/ghes-releases/scripts/notify-release-pms'
 import type { SourceNote } from '@/ghes-releases/scripts/notify-release-pms'
 
+// ─── parseSourceNotes ────────────────────────────────────────────────────────
+
 describe('parseSourceNotes', () => {
   test('extracts issue URLs from YAML comments', () => {
     const content = `date: '2026-04-01'
@@ -65,6 +67,8 @@ sections:
   })
 })
 
+// ─── buildMarker ─────────────────────────────────────────────────────────────
+
 describe('buildMarker', () => {
   test('produces a stable HTML comment marker for RC', () => {
     expect(buildMarker('3.21', 'rc')).toBe('<!-- ghes-release-note-review: 3.21-rc -->')
@@ -78,6 +82,8 @@ describe('buildMarker', () => {
     expect(buildMarker('3.21', 'rc')).not.toBe(buildMarker('3.21', 'ga'))
   })
 })
+
+// ─── buildCommentBody ────────────────────────────────────────────────────────
 
 describe('buildCommentBody', () => {
   test('includes the marker in the comment body', () => {
@@ -99,8 +105,11 @@ describe('buildCommentBody', () => {
   })
 })
 
+// ─── Duplicate-prevention logic ──────────────────────────────────────────────
+
 describe('duplicate-prevention filtering', () => {
-  // These tests cover duplicate filtering without running the CLI action.
+  // This tests the core filtering logic used in the CLI action:
+  //   const toNotify = sourceNotes.filter((n) => !alreadyCommented.has(n.issueNumber))
 
   const sourceNotes: SourceNote[] = [
     { issueUrl: 'https://github.com/github/releases/issues/100', issueNumber: 100 },
@@ -132,6 +141,7 @@ describe('duplicate-prevention filtering', () => {
     const marker = buildMarker('3.21', 'rc')
     const commentBody = buildCommentBody('3.21', true, 100, ['octocat'])
 
+    // Simulates the duplicate-check logic: comments.includes(marker)
     expect(commentBody.includes(marker)).toBe(true)
   })
 
@@ -143,6 +153,7 @@ describe('duplicate-prevention filtering', () => {
   })
 
   test('new issues added after initial run are not excluded', () => {
+    // Simulates: ran script once for issues 100+200, then re-run after adding 300
     const alreadyCommented = new Set([100, 200])
     const updatedSourceNotes: SourceNote[] = [
       ...sourceNotes,

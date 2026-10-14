@@ -69,7 +69,7 @@ import urlDecode from './url-decode'
 
 const ENABLE_FASTLY_TESTING = JSON.parse(process.env.ENABLE_FASTLY_TESTING || 'false')
 
-// asyncMiddleware passes unhandled promise rejections to Express's error handler.
+// Catch unhandled promise rejections and passing them to Express's error handler
 // https://medium.com/@Abazhenov/using-async-await-in-express-with-node-8-b8af872c0016
 const asyncMiddleware =
   <TReq extends Request = Request, T = void>(
@@ -83,38 +83,63 @@ const asyncMiddleware =
     }
   }
 
-// trust proxy makes req.ip read the left-most X-Forwarded-For value for rate limits and logs.
-// https://expressjs.com/en/guide/behind-proxies.html
 export default function index(app: Express) {
   app.use(abort)
 
+  // Don't use the proxy's IP, use the requester's for rate limiting or
+  // logging.
+  // See https://expressjs.com/en/guide/behind-proxies.html
+  // Essentially, setting this means it believe that the IP is the
+  // first of the `X-Forwarded-For` header values.
+  // If it was 0 (or false), the value would be that
+  // of `req.socket.remoteAddress`.
+  // Now, the `req.ip` becomes the first entry from x-forwarded-for
+  // and falls back on `req.socket.remoteAddress` in all other cases.
+  // Their documentation says:
+  //
+  //   	If true, the client's IP address is understood as the
+  //    left-most entry in the X-Forwarded-For header.
+  //
   app.set('trust proxy', true)
 
-  app.use(initLoggerContext)
-  app.use(getAutomaticRequestLogger())
-  app.use(expressMetrics)
+  // *** Logging ***
+  app.use(initLoggerContext) // Context for both inline logs (e.g. logger.info) and automatic logs
+  app.use(getAutomaticRequestLogger()) // Automatic logging for all requests e.g. "GET /path 200"
+  app.use(expressMetrics) // StatsD metrics for response time and status codes
 
-  // Keep healthcheck early so cluster probes skip slower middleware.
+  // Put this early to make it as fast as possible because it's used
+  // to check the health of each cluster.
   app.use('/healthcheck', healthcheck)
 
-  // Default surrogate keys must run before static assets, so static responses can inherit them.
+  // Must appear before static assets and all other requests
+  // otherwise we won't be able to benefit from that functionality
+  // for static assets as well.
   app.use(setDefaultFastlySurrogateKey)
 
-  // safeRedirect must run before middleware that redirects.
+  // Attaches res.safeRedirect() to every response. Must appear before
+  // any middleware that redirects.
   app.use(safeRedirect)
 
-  // archivedEnterpriseVersionsAssets must run before static asset middleware.
+  // archivedEnterpriseVersionsAssets must come before static/assets
   app.use(asyncMiddleware(archivedEnterpriseVersionsAssets))
 
   app.use(favicons)
 
-  // Checksummed assets keep manual keys; assetPreprocessing later rewrites /assets/cb-* URLs.
+  // Any static URL that contains some sort of checksum that makes it
+  // unique gets the "manual" surrogate key. If it's checksummed,
+  // it's bound to change when it needs to change. Otherwise,
+  // we want to make sure it doesn't need to be purged just because
+  // there's a production deploy.
+  // Note, for `/assets/cb-*...` requests,
+  // this needs to come before `assetPreprocessing` because
+  // the `assetPreprocessing` middleware will rewrite `req.url` if
+  // it applies.
   app.use(setStaticAssetCaching)
 
-  // archivedAssetRedirects must run before other asset middleware.
+  // Must come before any other middleware for assets
   app.use(archivedAssetRedirects)
 
-  // assetPreprocessing must run before express.static assets.
+  // This must come before the express.static('assets') middleware.
   app.use(assetPreprocessing)
 
   app.use(
@@ -122,10 +147,11 @@ export default function index(app: Express) {
     express.static('assets', {
       index: false,
       etag: false,
-      // Content image URLs have cache-busting prefixes, so assets can cache aggressively.
+      // Can be aggressive because images inside the content get unique
+      // URLs with a cache busting prefix.
       maxAge: '7 days',
       immutable: process.env.NODE_ENV !== 'development',
-      // Let later middleware send the asset 404.
+      // The next middleware will try its luck and send the 404 if must.
       fallthrough: true,
     }),
   )
@@ -135,13 +161,15 @@ export default function index(app: Express) {
     express.static('src/graphql/data', {
       index: false,
       etag: false,
-      maxAge: '7 days', // Sparse releases tolerate longer caching.
-      // Missing release assets 404 here.
+      maxAge: '7 days', // A bit longer since releases are more sparse
+      // See note about the use of 'fallthrough'
       fallthrough: false,
     }),
   )
 
-  // In production, skip Next static handling because generated 404 HTML is expensive.
+  // In development, let NextJS on-the-fly serve the static assets.
+  // But in production, don't let NextJS handle any static assets
+  // because they are costly to generate (the 404 HTML page).
   if (process.env.NODE_ENV !== 'development') {
     const assetDir = path.join('.next', 'static')
     if (!fs.existsSync(assetDir))
@@ -154,52 +182,62 @@ export default function index(app: Express) {
         etag: false,
         maxAge: '365 days',
         immutable: true,
-        // Missing Next assets 404 here.
+        // See note about the use of 'fallthrough'
         fallthrough: false,
       }),
     )
   }
 
+  // *** Early exits ***
   app.use(shielding)
   app.use(handleNextDataPath)
 
+  // *** Security ***
   app.use(helmet)
   app.use(cookieParser)
   app.use(express.json())
 
   if (process.env.NODE_ENV === 'development') {
-    app.use(mockVaPortal)
+    app.use(mockVaPortal) // FOR TESTING.
   }
 
-  app.set('etag', false) // Disable Express ETags so middleware can set them explicitly when needed.
+  // ** Possible early exits after cookies **
 
-  app.use(urlDecode) // Must run before detectLanguage to decode @ symbols in version segments.
-  // Must run before context, breadcrumbs, findPage, handleErrors, and homepages.
-  app.use(detectLanguage)
-  app.use(detectVersion) // Must run before handleRedirects for version cookie support.
-  app.use(asyncMiddleware(reloadTree)) // Must run before context.
-  app.use(asyncMiddleware(context)) // Must run before earlyAccessLinks and handleRedirects.
-  app.use(shortVersions)
-  app.use(asyncMiddleware(renderProductName)) // Must run after shortVersions.
+  // *** Headers ***
+  app.set('etag', false) // We will manage our own ETags if desired
 
-  // archivedEnterpriseVersions must run before handleRedirects because it can redirect or serve.
+  // *** Config and context for redirects ***
+  app.use(urlDecode) // Must come before detectLanguage to decode @ symbols in version segments
+  app.use(detectLanguage) // Must come before context, breadcrumbs, find-page, handle-errors, homepages
+  app.use(detectVersion) // Must come before handle-redirects for version cookie support
+  app.use(asyncMiddleware(reloadTree)) // Must come before context
+  app.use(asyncMiddleware(context)) // Must come before early-access-*, handle-redirects
+  app.use(shortVersions) // Support version shorthands
+  app.use(asyncMiddleware(renderProductName)) // Must come after shortVersions
+
+  // Must come before handleRedirects.
+  // This middleware might either redirect to serve something.
   app.use(asyncMiddleware(archivedEnterpriseVersions))
 
+  // *** Redirects, 3xx responses ***
+  // I ordered these by use frequency
   app.use(trailingSlashes)
-  app.use(languageCodeRedirects) // Must run before contextualizers.
-  app.use(handleRedirects) // Must run before contextualizers.
+  app.use(languageCodeRedirects) // Must come before contextualizers
+  app.use(handleRedirects) // Must come before contextualizers
 
-  // Must run before breadcrumbs, featuredLinks, productGroups, and renderPage.
-  app.use(asyncMiddleware(findPage))
+  // *** Config and context for rendering ***
+  app.use(asyncMiddleware(findPage)) // Must come before archived-enterprise-versions, breadcrumbs, featured-links, products, render-page
   app.use(blockRobots)
 
+  // *** Rendering, 2xx responses ***
   app.use('/api', api)
   app.use('/llms.txt', llmsTxt)
   app.get('/_build', buildInfo)
   app.get('/_req-headers', reqHeaders)
   app.use(asyncMiddleware(manifestJson))
 
-  // After req.language exists, remaining endpoints get language keys; /api keeps its own.
+  // Things like `/api` sets their own Fastly surrogate keys.
+  // Now that the `req.language` is known, set it for the remaining endpoints
   app.use(setLanguageFastlySurrogateKey)
 
   app.use(robots)
@@ -207,14 +245,16 @@ export default function index(app: Express) {
   app.use('/categories.json', asyncMiddleware(categoriesForSupport))
   app.get('/_500', asyncMiddleware(triggerError))
 
-  // HEAD requests skip slower full page rendering.
+  // Specifically deal with HEAD requests before doing the slower
+  // full page rendering.
   app.head('/*path', fastHead)
 
+  // *** Preparation for render-page: contextualizers ***
   app.use(asyncMiddleware(dataTables))
   app.use(asyncMiddleware(secretScanning))
   app.use(asyncMiddleware(ghesReleaseNotes))
   app.use(layout)
-  app.use(features) // Must run before currentProductTree.
+  app.use(features) // needs to come before product tree
   app.use(asyncMiddleware(currentProductTree))
   app.use(asyncMiddleware(genericToc))
   app.use(breadcrumbs)
@@ -226,15 +266,18 @@ export default function index(app: Express) {
   app.use(asyncMiddleware(journeyTrack))
 
   if (ENABLE_FASTLY_TESTING) {
-    // fastlyCacheTest intercepts all routed requests, so keep the route narrow.
+    // The fastlyCacheTest middleware is intended to be used with Fastly to test caching behavior.
+    // This middleware will intercept ALL requests routed to it, so be careful if you need to
+    // make any changes to the following line:
     app.use('/fastly-cache-test', fastlyCacheTest)
   }
 
+  // handle serving NextJS bundled code (/_next/*)
   app.use(next)
 
-  // renderPage must run after specialized routes.
+  // *** Rendering, must go almost last ***
   app.get('/*path', asyncMiddleware(renderPage))
 
-  // handleErrors must run last to catch middleware errors.
+  // *** Error handling, must go last ***
   app.use(handleErrors)
 }

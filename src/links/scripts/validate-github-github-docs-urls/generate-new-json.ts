@@ -22,7 +22,8 @@ export function generateNewJSON(
   for (const [identifier, url] of Object.entries(destination)) {
     const check = checks.find((foundCheck) => foundCheck.identifier === identifier)
     if (check) {
-      // Redirects are the only automatic docs URL correction.
+      // At the moment, the only possible correction is if the URL is
+      // found but required a redirect.
       if (check.redirect) {
         destination[identifier] = check.redirect
         console.log(
@@ -35,7 +36,8 @@ export function generateNewJSON(
 
   if (countChanges > 0) {
     const writeTo = options.output || destinationFilePath
-    // Match github/github script/add-docs-url JSON formatting exactly.
+    // It's important that this serializes exactly like the Ruby code
+    // that is the CLI script `script/add-docs-url` in github/github.
     const serialized = `${JSON.stringify(destination, null, 2)}\n`
     fs.writeFileSync(writeTo, serialized, 'utf-8')
     console.log(`Wrote ${countChanges} change${countChanges === 1 ? '' : 's'} to ${writeTo}`)

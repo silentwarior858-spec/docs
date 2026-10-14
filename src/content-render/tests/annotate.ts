@@ -22,27 +22,33 @@ describe('annotate', () => {
     const res = await renderContent(example)
     const $ = load(res)
 
+    // Check that the annotation structure is rendered correctly
     const annotation = $('.annotate')
     expect(annotation.length).toBe(1)
     expect(annotation.hasClass('beside')).toBe(true)
 
+    // Check annotation header exists
     const header = $('.annotate-header')
     expect(header.length).toBe(1)
 
+    // Check both beside and inline modes are rendered
     const beside = $('.annotate-beside')
     const inline = $('.annotate-inline')
     expect(beside.length).toBe(1)
     expect(inline.length).toBe(1)
 
+    // Check that we have the correct number of annotation rows
     const rows = $('.annotate-row')
     expect(rows.length).toBe(2)
 
+    // Check that each row has both code and note sections
     rows.each((i, row) => {
       const $row = $(row)
       expect($row.find('.annotate-code').length).toBe(1)
       expect($row.find('.annotate-note').length).toBe(1)
     })
 
+    // Check specific content of the annotations
     const notes = $('.annotate-note p')
     const noteTexts = notes.map((i, el) => $(el).text()).get()
     expect(noteTexts).toEqual([
@@ -50,6 +56,7 @@ describe('annotate', () => {
       'Add the pull_request event, so that the workflow runs automatically\nevery time a pull request is created.',
     ])
 
+    // Check code content
     const codes = $('.annotate-code pre')
     const codeTexts = codes.map((i, el) => $(el).text()).get()
     expect(codeTexts).toEqual([
@@ -124,6 +131,7 @@ on: [push]
 \`\`\`
 `
 
+    // Create a mock context with pages for AUTOTITLE resolution
     const mockPages: Record<string, { href: string; rawTitle: string }> = {
       '/get-started/start-your-journey/hello-world': {
         href: '/get-started/start-your-journey/hello-world',
@@ -140,7 +148,7 @@ on: [push]
       currentVersion: 'free-pro-team@latest',
       pages: mockPages,
       redirects: {},
-      // AUTOTITLE resolution reads only these Context fields.
+      // Mock test object doesn't need all Context properties, using 'as unknown as' to bypass strict type checking
     } as unknown as Context
 
     const res = await renderContent(autotitleExample, mockContext)
@@ -149,6 +157,7 @@ on: [push]
     const rows = $('.annotate-row')
     const notes = $('.annotate-note', rows)
 
+    // Check that AUTOTITLE links were resolved to actual titles
     const firstNote = notes.eq(0).html()
     const secondNote = notes.eq(1).html()
 

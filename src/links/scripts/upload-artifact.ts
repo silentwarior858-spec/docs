@@ -1,6 +1,11 @@
 import fs from 'fs'
 
-// Writes workflow artifacts to disk so later steps can upload or inspect them.
+/* Writes string to file to be uploaded as an action artifact.
+ * Useful for debugging or passing results to downstream action
+ *
+ * @param {string} name - name of artifact
+ * @param {string} contents - string contents of artifact
+ */
 export async function uploadArtifact(name: string, contents: string) {
   if (!fs.existsSync('./artifacts')) {
     fs.mkdirSync('./artifacts/')

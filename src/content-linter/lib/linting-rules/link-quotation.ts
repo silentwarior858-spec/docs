@@ -1,5 +1,6 @@
 import { addError, filterTokens } from 'markdownlint-rule-helpers'
 import { getRange, quotePrecedesLinkOpen } from '../helpers/utils'
+import { escapeRegExp } from 'lodash-es'
 import type { RuleParams, RuleErrorCallback, MarkdownToken, Rule } from '../../types'
 
 export const linkQuotation: Rule = {
@@ -20,11 +21,11 @@ export const linkQuotation: Rule = {
         if (child.type === 'link_open' && quotePrecedesLinkOpen(previous_child.content || '')) {
           if (!child.attrs) continue
           inLinkWithPrecedingQuotes = true
-          linkUrl = RegExp.escape(child.attrs[0][1])
+          linkUrl = escapeRegExp(child.attrs[0][1])
         } else if (inLinkWithPrecedingQuotes && child.type === 'text') {
-          content.push(RegExp.escape((child.content || '').trim()))
+          content.push(escapeRegExp((child.content || '').trim()))
         } else if (inLinkWithPrecedingQuotes && child.type === 'code_inline') {
-          content.push(`\`${RegExp.escape((child.content || '').trim())}\``)
+          content.push(`\`${escapeRegExp((child.content || '').trim())}\``)
         } else if (child.type === 'link_close') {
           const title = content.join(' ')
           const regex = new RegExp(`"\\[${title}\\]\\(${linkUrl}\\)({%.*%})?(!|\\.|\\?|,)?"`)

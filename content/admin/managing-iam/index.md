@@ -5,7 +5,6 @@ redirect_from:
   - /enterprise/admin/authentication
   - /admin/authentication
   - /admin/identity-and-access-management
-allowTitleToDifferFromFilename: true
 versions:
   ghec: '*'
   ghes: '*'

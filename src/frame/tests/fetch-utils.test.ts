@@ -85,7 +85,8 @@ describe('fetchWithRetry ttfb timeout mode', () => {
 
     await fetchWithRetry('https://example.test/big', {}, { timeout: 10, timeoutMode: 'ttfb' })
 
-    // Wait past the TTFB deadline to prove response resolution cleared the timer.
+    // Wait well past the TTFB deadline; the timer must have been cleared so the
+    // signal stays unaborted and a subsequent body read wouldn't be cut off.
     await new Promise((resolve) => setTimeout(resolve, 40))
     expect(capturedSignal?.aborted).toBe(false)
     expect(statsdIncrement).not.toHaveBeenCalled()
@@ -196,7 +197,9 @@ describe('fetchStream timeout mode', () => {
 
     await fetchStream('https://example.test/stream', {}, { timeout: 10, throwHttpErrors: false })
 
-    // Wait past the TTFB deadline to prove response resolution cleared the default timer.
+    // A streaming caller reads the body well past the connect deadline. With the
+    // ttfb default the timer is cleared on response-resolve, so the signal stays
+    // unaborted and a long-running reader.read() loop won't be cut off.
     await new Promise((resolve) => setTimeout(resolve, 40))
     expect(capturedSignal?.aborted).toBe(false)
     expect(statsdIncrement).not.toHaveBeenCalled()

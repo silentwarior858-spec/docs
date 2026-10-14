@@ -1,13 +1,13 @@
-# This file was generated with Kustomize. Please do not edit manually.
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    moda.github.net/domain-name: docs-internal-%environment%.service.%region%.github.net
-    moda.github.net/load-balancer-type: internal-http
+  name: webapp
   labels:
     service: webapp
-  name: webapp
+  annotations:
+    moda.github.net/domain-name: 'docs-internal-%environment%.service.%region%.github.net'
+    # HTTP app reachable inside GitHub's network (employee website)
+    moda.github.net/load-balancer-type: internal-http
 spec:
   ports:
     - name: http

@@ -9,7 +9,7 @@
 * Rust{% else ifversion codeql-rust-public-preview %}
 * Rust (public preview){% endif %}
 * Swift
-* {% data variables.product.prodname_actions %} workflows
+{% ifversion code-scanning-actions-language %}* {% data variables.product.prodname_actions %} workflows{% endif %}
 
 > [!NOTE]
 >

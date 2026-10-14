@@ -1,4 +1,6 @@
-// Matches the monolith alert syntax and styling.
+/*
+Custom "Alerts", based on similar filter/styling in the monolith code.
+*/
 
 import { visit } from 'unist-util-visit'
 import { h } from 'hastscript'
@@ -21,7 +23,7 @@ const alertTypes: Record<string, AlertType> = {
   CAUTION: { icon: 'stop', color: 'danger' },
 }
 
-// Matches alert markers such as [!NOTE] and [!IMPORTANT].
+// Must contain one of [!NOTE], [!IMPORTANT], ...
 const ALERT_REGEXP = new RegExp(`\\[!(${Object.keys(alertTypes).join('|')})\\]`, 'gi')
 // Non-global version for .test() and .match() to avoid stateful lastIndex issues
 const ALERT_REGEXP_DETECT = new RegExp(`\\[!(${Object.keys(alertTypes).join('|')})\\]`, 'i')

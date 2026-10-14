@@ -248,13 +248,14 @@ This SARIF output file has example values to show the minimum required propertie
           "name": "Tool Name",
           "rules": [
             {
-              "id": "R01",
+              "id": "R01"
+                      ...
               "properties" : {
                  "id" : "java/unsafe-deserialization",
                  "kind" : "path-problem",
                  "name" : "...",
                  "problem.severity" : "error",
-                 "security-severity" : "9.8"
+                 "security-severity" : "9.8",
                }
             }
           ]
@@ -308,13 +309,14 @@ This SARIF output file has example of values for the field `originalUriBaseIds`,
           "name": "Tool Name",
           "rules": [
             {
-              "id": "R01",
+              "id": "R01"
+                      ...
               "properties" : {
                  "id" : "java/unsafe-deserialization",
                  "kind" : "path-problem",
                  "name" : "...",
                  "problem.severity" : "error",
-                 "security-severity" : "9.8"
+                 "security-severity" : "9.8",
                }
             }
           ]

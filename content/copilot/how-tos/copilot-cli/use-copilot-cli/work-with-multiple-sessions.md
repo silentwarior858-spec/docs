@@ -43,7 +43,7 @@ The sidebar is a panel that opens alongside your current chat. Because it sits b
 
 ### Opening and closing the sidebar
 
-From your conversation, while there is nothing in the prompt input field, press <kbd>←</kbd> to open the sidebar, then press <kbd>←</kbd> again to move focus into it. Press <kbd>→</kbd> to move focus back to the conversation, and again to close the sidebar. If you prefer Vim-style keys, <kbd>l</kbd> works the same as <kbd>→</kbd> while the sidebar has focus.
+From your conversation, while there is nothing in the prompt input field, press <kbd>←</kbd> to open the sidebar and move focus into it. Press <kbd>→</kbd> to move focus back to the conversation, and again to close the sidebar. If you prefer Vim-style keys, <kbd>h</kbd> and <kbd>l</kbd> work the same way while the sidebar has focus.
 
 ### Moving between sessions
 
@@ -67,17 +67,14 @@ At the top of the sidebar are two header buttons: **←** (to close the sidebar)
 
 ### Reading session status at a glance
 
-Because the sidebar stays on screen while you work, it acts as a session status board. Each session shows an indicator of its current state. At a glance you can tell which sessions are:
+Because the sidebar stays on screen while you work, it acts as a session status board. You can tell at a glance which sessions are:
 
-* Busy processing a turn (a pulsing circle: `● ◉ ◎ ○`).
-* Idle and waiting for your next prompt (a steady circle: `●`).
-* Finished a turn while you were in another session, and not opened since (a different colored steady circle: `●`).
-* Awaiting your attention (`!` for a permission prompt, `?` for a question).
-* Recently used, but not currently running (a hollow circle: `○`).
+* Currently running (a solid circle icon: `●`).
 * The current session displayed in the CLI's **Current** tab (highlighted).
-* In a particular mode (plan and autopilot modes tint some dots and the session name).
-
-The colors of these indicators depend on your terminal's color scheme and the theme you set with `/theme`. Because of this, the shape of the circle and the `!`, `?`, and `○` markers are the most reliable cues. For the full list of indicators and their default colors, see [AUTOTITLE](/copilot/reference/copilot-cli-reference/cli-command-reference#session-status-indicators).
+* Recently used, but not currently running (a hollow circle icon: `○`).
+* Busy processing a turn (a pulsing circle icon: `● ◉ ◎ ○`), or idle (a static icon).
+* Awaiting your attention (`!` for a permission prompt, `?` for a question).
+* In a particular mode (plan and autopilot modes use different colored text from the default mode).
 
 ### Resizing and mouse control
 
@@ -167,9 +164,9 @@ Sessions can also run **remotely**. When you delegate a task with [`/delegate`](
 
 ### Stopping a session
 
-To stop the session you are currently working in without deleting it, use the `/exit` slash command. The session is saved and you can resume it later.
+To stop the session you are currently working in, use the `/exit` slash command. Alternatively, you can stop a session from the sidebar by highlighting it and pressing <kbd>x</kbd>. This stops the session and removes it from the sidebar until you resume it.
 
-Alternatively, you can permanently delete a session from the sidebar by highlighting it and pressing <kbd>x</kbd> twice. {% data reusables.copilot.close-session %}
+Stopping a session doesn't delete it. The session is saved and you can resume it later.
 
 You don't have to stop sessions. Leaving them running lets you switch back instantly with their full context. But you might stop one to halt work you no longer want: for example, a session running in autopilot mode, or a session running a prompt that you scheduled with `/every` or `/after`. You might also choose to stop a session to free up memory, or just to reduce clutter in the sidebar.
 
@@ -190,7 +187,7 @@ You can manage sessions with slash commands from inside any session:
 | `/session checkpoints [N]` | Show the session's checkpoints. |
 | `/session cleanup`, `/session prune` | Housekeeping for old or stale session data. |
 | `/session delete [ID]`, `/session delete-all` | Delete a session, or all of them. |
-| `/exit`, `/quit` | Close the current session. If others are open, the nearest remaining one in the sidebar order comes to the foreground. The CLI quits only when you close the last session. |
+| `/exit`, `/quit` | Close the current session. If others are open, the newest remaining one comes to the foreground. The CLI quits only when you close the last session. |
 
 ## Customizing the sidebar
 
@@ -199,5 +196,5 @@ The sidebar is available by default. You can turn off the ability to open it, or
 For the full list of sidebar settings and their defaults, see [AUTOTITLE](/copilot/reference/copilot-cli-reference/cli-command-reference#sessions-sidebar-settings).
 
 Further reading:
-* [AUTOTITLE](/copilot/concepts/security-governance-and-network-settings/session-data)
+* [AUTOTITLE](/copilot/concepts/agents/copilot-cli/chronicle)
 * [AUTOTITLE](/copilot/reference/copilot-cli-reference/cli-command-reference#session-status-indicators)

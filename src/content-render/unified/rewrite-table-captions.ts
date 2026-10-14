@@ -2,9 +2,35 @@ import { visit } from 'unist-util-visit'
 import type { Node, Parent } from 'unist'
 import type { Element, Text } from 'hast'
 
-// Label otherwise unnamed tables from the nearest heading for screen reader table navigation.
-// <h2 id="limits">Limits</h2><table>...</table> becomes:
-// <h2 id="limits">Limits</h2><table aria-labelledby="limits">...</table>.
+/**
+ * A rehype plugin that automatically adds aria-labelledby attributes to tables
+ * based on their preceding headings for accessibility.
+ *
+ * This plugin improves table accessibility by ensuring screen readers can
+ * announce table names when users navigate with the 'T' shortcut key.
+ *
+ * Transforms this structure:
+ *
+ *   <h2 id="supported-platforms">Supported platforms</h2>
+ *   <table>
+ *     <thead>...</thead>
+ *     <tbody>...</tbody>
+ *   </table>
+ *
+ * Into this:
+ *
+ *   <h2 id="supported-platforms">Supported platforms</h2>
+ *   <table aria-labelledby="supported-platforms">
+ *     <thead>...</thead>
+ *     <tbody>...</tbody>
+ *   </table>
+ *
+ * The plugin works by:
+ * 1. Finding table elements in the HTML AST
+ * 2. Looking backwards for the nearest preceding heading with an id
+ * 3. Adding aria-labelledby attribute pointing to that heading's id
+ * 4. Skipping tables that already have accessibility attributes
+ */
 
 interface HeadingInfo {
   id: string
@@ -41,10 +67,12 @@ function hasExistingCaption(tableNode: Element): boolean {
 function findPrecedingHeading(parent: Parent, tableIndex: number): HeadingInfo | null {
   if (!parent.children || tableIndex === 0) return null
 
+  // Look backwards from the table position for the nearest heading
   for (let i = tableIndex - 1; i >= 0; i--) {
     const node = parent.children[i]
 
     if (isHeadingElement(node)) {
+      // Check if the heading has an id attribute
       const headingId = node.properties?.id
       if (headingId) {
         return {
@@ -54,7 +82,7 @@ function findPrecedingHeading(parent: Parent, tableIndex: number): HeadingInfo |
       }
     }
 
-    // A previous table, section, article, or div breaks the heading association.
+    // Stop searching if we hit another table or significant content block
     if (
       isTableElement(node) ||
       (node.type === 'element' && ['section', 'article', 'div'].includes((node as Element).tagName))
@@ -89,16 +117,18 @@ export default function addTableAccessibilityLabels() {
         return
       }
 
-      // Preserve existing accessible names from ARIA attributes or captions.
+      // Skip tables that already have accessibility attributes or captions
       if (hasExistingAccessibilityAttributes(node) || hasExistingCaption(node)) {
         return
       }
 
+      // Find the preceding heading
       const precedingHeading = findPrecedingHeading(parent, index)
       if (!precedingHeading) {
         return
       }
 
+      // Add aria-labelledby attribute to the table
       if (!node.properties) {
         node.properties = {}
       }

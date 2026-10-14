@@ -11,5 +11,7 @@ children:
   - /generate-unit-tests
   - /create-mock-objects
   - /create-end-to-end-tests
+  - /update-unit-tests
 contentType: tutorials
 ---
+

@@ -1,4 +1,9 @@
-// Prints assets that no content or code file mentions.
+// [start-readme]
+//
+// Print a list of all the asset files that can't be found mentioned
+// in any of the source files (content & code).
+//
+// [end-readme]
 
 import fs from 'fs'
 import path from 'path'
@@ -74,7 +79,7 @@ const EXCEPTIONS = new Set([
   'assets/images/social-cards/subscriptions-and-notifications.png',
   'assets/images/social-cards/support.png',
   'assets/images/social-cards/webhooks.png',
-  // Hero images may be reused even when no source file mentions them.
+  // Hero images may not be used, but we keep them around for future use
   'assets/images/banner-images/hero-1.png',
   'assets/images/banner-images/hero-2.png',
   'assets/images/banner-images/hero-3.png',
@@ -84,7 +89,11 @@ const EXCEPTIONS = new Set([
 ])
 
 function isExceptionPath(imagePath: string) {
-  // Local macOS image folders can contain .DS_Store files that are not tracked.
+  // We also check for .DS_Store because any macOS user that has opened
+  // a folder with images will have this on disk. It won't get added
+  // to git anyway thanks to our .DS_Store.
+  // But if we don't make it a valid exception, it can become inconvenient
+  // to run this script locally.
   return (
     EXCEPTIONS.has(imagePath) ||
     path.basename(imagePath) === '.DS_Store' ||
@@ -122,7 +131,10 @@ async function main(opts: MainOptions) {
   sourceFiles.push(...englishFiles)
 
   if (!excludeTranslations) {
-    // Translations keep files after English renames, so only search translated files that match English.
+    // Need to have this so we can filter the translations files and avoid
+    // including orphans. Because translations generally don't delete files.
+    // When the English content renames something, you later end up with
+    // 2 files in each translation repo.
     const englishRelativeFiles = new Set(
       englishFiles.map((englishFile) => path.relative(languages.en.dir, englishFile)),
     )
@@ -161,6 +173,7 @@ async function main(opts: MainOptions) {
       ),
     )
   }
+  // Add exceptions
   sourceFiles.push('.github/CONTRIBUTING.md')
   sourceFiles.push('README.md')
   if (verbose) {
@@ -200,7 +213,8 @@ async function main(opts: MainOptions) {
     console.log(JSON.stringify([...allImages], undefined, 2))
   } else {
     for (const imagePath of [...allImages].sort((a, b) => a.localeCompare(b))) {
-      // Quotes preserve paths with spaces when piped to xargs.
+      // It's important to escape spaces if we're ever going to pipe this
+      // to xargs.
       console.log(`"${imagePath}"`)
     }
   }

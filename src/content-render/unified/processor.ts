@@ -1,7 +1,7 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import gfm from 'remark-gfm'
-import emoji from 'remark-gemoji'
+import emoji from 'remark-gemoji-to-emoji'
 import remark2rehype from 'remark-rehype'
 import raw from 'rehype-raw'
 import slug from 'rehype-slug'
@@ -41,24 +41,38 @@ export function createProcessor(context: Context): UnifiedProcessor {
       .use(remarkParse)
       .use(removeHtmlComments)
       .use(gfm)
+      // Markdown AST below vvv
       .use(parseInfoString)
-      // TypeScript's unified plugin types do not model context-bound transformer factories.
+      // Using type assertion because rewriteLocalLinks is a factory function that takes context
+      // and returns a transformer, but TypeScript's unified plugin types don't handle this pattern
       .use(rewriteLocalLinks as unknown as (ctx: Context) => void, context)
       .use(emoji)
+      // Markdown AST above ^^^
       .use(remark2rehype, { allowDangerousHtml: true })
+      // HTML AST below vvv
       .use(slug)
+      // useEnglishHeadings plugin requires context with englishHeadings property
       .use(useEnglishHeadings as unknown as (ctx: Context) => void, context || {})
       .use(headingLinks)
       .use(codeHeader)
       .use(annotate as unknown as (ctx: Context) => void, context)
-      // TypeScript's unified plugin types do not model rehype-highlight's lowlight options.
+      // Using type assertion for highlight plugin due to complex type mismatch between unified and rehype-highlight
       .use(highlight as unknown as (options: unknown) => void, {
         languages: { ...common, graphql, dockerfile, http, groovy, erb, powershell },
         subset: false,
         aliases: {
-          // Register jsonc as a JSON alias so JSON with comments gets docs-site highlighting.
+          // As of Jan 2024, 'jsonc' is not supported by highlight.js. It
+          // just becomes plain text.
+          // But 'jsonc' works great in github.com. For example, when
+          // previewing and edited .md content in the browser. Or viewing
+          // PR diffs in web view.
+          // So by sticking to 'jsonc' where there's JSON with comments,
+          // it's technically more correct, looks good in github.com,
+          // but with this alias you get the nice syntax highlighting when
+          // viewed on our site.
           json: 'jsonc',
-          // Map docs-only copilot fences to text so contributors can use them.
+          // Docs supports a custom 'copilot' language, which is useful for contributors,
+          // but is not a supported highlight.js language, so alias to 'text'.
           text: 'copilot',
         },
       })
@@ -74,8 +88,10 @@ export function createProcessor(context: Context): UnifiedProcessor {
       .use(wrapCodeTerms)
       .use(rewriteImgSources)
       .use(rewriteAssetImgTags)
+      // alerts plugin requires context with alertTitles property
       .use(alerts as unknown as (ctx: Context) => void, context || {})
-      .use(html) as unknown as UnifiedProcessor
+      // HTML AST above ^^^
+      .use(html) as unknown as UnifiedProcessor // String below vvv
   )
 }
 
@@ -84,7 +100,8 @@ export function createMarkdownOnlyProcessor(context: Context): UnifiedProcessor 
     unified()
       .use(remarkParse)
       .use(gfm)
-      // TypeScript's unified plugin types do not model context-bound transformer factories.
+      // Using type assertion because rewriteLocalLinks is a factory function that takes context
+      // and returns a transformer, but TypeScript's unified plugin types don't handle this pattern
       .use(rewriteLocalLinks as unknown as (ctx: Context) => void, context)
       .use(remarkStringify) as unknown as UnifiedProcessor
   )
@@ -95,7 +112,8 @@ export function createMinimalProcessor(context: Context): UnifiedProcessor {
     unified()
       .use(remarkParse)
       .use(gfm)
-      // TypeScript's unified plugin types do not model context-bound transformer factories.
+      // Using type assertion because rewriteLocalLinks is a factory function that takes context
+      // and returns a transformer, but TypeScript's unified plugin types don't handle this pattern
       .use(rewriteLocalLinks as unknown as (ctx: Context) => void, context)
       .use(remark2rehype, { allowDangerousHtml: true })
       .use(slug)

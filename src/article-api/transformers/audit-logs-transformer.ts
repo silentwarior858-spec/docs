@@ -6,6 +6,10 @@ import { renderContent } from '@/content-render/index'
 import { loadTemplate } from '@/article-api/lib/load-template'
 import matter from '@gr2m/gray-matter'
 
+/**
+ * Transformer for Audit Logs pages
+ * Converts audit log events and their data into markdown format using a Liquid template
+ */
 export class AuditLogsTransformer implements PageTransformer {
   templateName = 'audit-logs-page.template.md'
 
@@ -14,10 +18,11 @@ export class AuditLogsTransformer implements PageTransformer {
   }
 
   async transform(page: Page, pathname: string, context: Context): Promise<string> {
-    // Dynamic import avoids circular dependencies.
+    // Import audit log lib dynamically to avoid circular dependencies
     const { getCategorizedAuditLogEvents, getCategoryNotes, resolveReferenceLinksToMarkdown } =
       await import('@/audit-logs/lib/index')
 
+    // Extract version from context
     const currentVersion = context.currentVersion!
 
     let pageType = ''
@@ -31,9 +36,11 @@ export class AuditLogsTransformer implements PageTransformer {
       throw new Error(`Unknown audit log page type for path: ${pathname}`)
     }
 
+    // Get the audit log events data
     const categorizedEvents = getCategorizedAuditLogEvents(pageType, currentVersion)
     const categoryNotes = getCategoryNotes()
 
+    // Prepare manual content
     let manualContent = ''
     if (page.markdown) {
       const markerIndex = page.markdown.indexOf(
@@ -56,6 +63,7 @@ export class AuditLogsTransformer implements PageTransformer {
       }
     }
 
+    // Prepare data for template
     const templateData = await this.prepareTemplateData(
       page,
       categorizedEvents,
@@ -65,8 +73,10 @@ export class AuditLogsTransformer implements PageTransformer {
       resolveReferenceLinksToMarkdown,
     )
 
+    // Load and render template
     const templateContent = loadTemplate(this.templateName)
 
+    // Render the template with Liquid
     const rendered = await renderContent(templateContent, {
       ...context,
       ...templateData,
@@ -76,6 +86,9 @@ export class AuditLogsTransformer implements PageTransformer {
     return rendered
   }
 
+  /**
+   * Prepare data for the Liquid template
+   */
   private async prepareTemplateData(
     page: Page,
     categorizedEvents: CategorizedEvents,
@@ -87,14 +100,16 @@ export class AuditLogsTransformer implements PageTransformer {
       context: TitleResolutionContext,
     ) => Promise<string>,
   ): Promise<Record<string, unknown>> {
+    // Prepare page intro
     const intro = page.intro ? await page.renderProp('intro', context, { textOnly: true }) : ''
 
+    // Sort categories and events, and compute fields shared by most (≥80%) events
     const allFieldSets: string[][] = []
     const sortedCategorizedEvents: CategorizedEvents = {}
     const sortedCategories = Object.keys(categorizedEvents).sort((a, b) => a.localeCompare(b))
 
     for (const category of sortedCategories) {
-      // Copy cached array before sorting; clone events before resolving links or trimming fields.
+      // Create a copy of the events array to avoid mutating the cache
       const events = [...categorizedEvents[category]].sort((a, b) =>
         a.action.localeCompare(b.action),
       )
@@ -115,7 +130,7 @@ export class AuditLogsTransformer implements PageTransformer {
       )
     }
 
-    // Base fields appear in at least 80 percent of events.
+    // Compute base fields that appear in ≥80% of events
     const fieldCounts = new Map<string, number>()
     for (const fields of allFieldSets) {
       for (const f of fields) {
@@ -128,7 +143,7 @@ export class AuditLogsTransformer implements PageTransformer {
       .map(([field]) => field)
       .sort()
 
-    // Event rows omit base fields because the template lists them once.
+    // Remove base fields from each event's field list
     const baseFieldSet = new Set(baseFields)
     for (const category of Object.keys(sortedCategorizedEvents)) {
       for (const event of sortedCategorizedEvents[category]) {

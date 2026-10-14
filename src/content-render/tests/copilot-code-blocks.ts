@@ -18,8 +18,11 @@ describe('code-header plugin', () => {
 
       const html = await renderContent(markdown)
 
+      // Should keep copilot as the language (not convert to text without copy meta)
       expect(html).toContain('language-copilot')
+      // Should NOT wrap in code-example div since no copy meta
       expect(html).not.toContain('code-example')
+      // Should NOT have header since no copy meta
       expect(html).not.toContain('<header')
     })
 
@@ -28,10 +31,13 @@ describe('code-header plugin', () => {
 
       const html = await renderContent(markdown)
 
+      // Should be wrapped in code-example div
       expect(html).toContain('code-example')
+      // Should have header with copy button
       expect(html).toContain('<header')
       expect(html).toContain('js-btn-copy')
       expect(html).toContain('language-copilot')
+      // Should NOT have prompt button (no prompt meta)
       expect(html).not.toContain('https://github.com/copilot?prompt=')
     })
 
@@ -40,10 +46,14 @@ describe('code-header plugin', () => {
 
       const html = await renderContent(markdown)
 
+      // Should be wrapped in code-example div
       expect(html).toContain('code-example')
+      // Should have header
       expect(html).toContain('<header')
+      // Should have prompt button
       expect(html).toContain('https://github.com/copilot?prompt=')
       expect(html).toContain('language-copilot')
+      // Should NOT have copy button
       expect(html).not.toContain('js-btn-copy')
     })
 
@@ -52,11 +62,15 @@ describe('code-header plugin', () => {
 
       const html = await renderContent(markdown)
 
+      // Should be wrapped in code-example div
       expect(html).toContain('code-example')
+      // Should have header with copy button
       expect(html).toContain('<header')
       expect(html).toContain('js-btn-copy')
+      // Should have prompt button with encoded URL
       expect(html).toContain('https://github.com/copilot?prompt=')
       expect(html).toContain('Improve%20the%20variable%20names%20in%20this%20function')
+      // Should have Copilot icon button
       expect(html).toContain('aria-label="Run this prompt in Copilot Chat"')
       expect(html).toContain('language-copilot')
     })
@@ -80,9 +94,12 @@ Improve the variable names in this function
 
       const html = await renderContent(markdown)
 
+      // Should have prompt button with both code blocks in URL
       expect(html).toContain('https://github.com/copilot?prompt=')
+      // Should contain encoded content from both the referenced code and the prompt
       expect(html).toContain('function%20logPersonsAge')
       expect(html).toContain('Improve%20the%20variable%20names')
+      // Should have different aria-label indicating context
       expect(html).toContain('aria-label="Run this prompt with context in Copilot Chat"')
     })
 
@@ -105,10 +122,14 @@ Improve the variable names in this function
 
       const html = await renderContent(markdown)
 
+      // Should have prompt button with both code blocks in URL
       expect(html).toContain('https://github.com/copilot?prompt=')
+      // Should contain encoded content from both the referenced code and the prompt
       expect(html).toContain('function%20logPersonsAge')
       expect(html).toContain('Improve%20the%20variable%20names')
+      // Should have different aria-label indicating context
       expect(html).toContain('aria-label="Run this prompt with context in Copilot Chat"')
+      // Should NOT have copy button
       expect(html).not.toContain('js-btn-copy')
     })
   })
@@ -122,14 +143,19 @@ Improve the variable names in this function
 
       const html = await renderContent(markdown)
 
+      // Should warn about missing reference via structured logger
       expect(mockWarn).toHaveBeenCalledWith('Cannot find referenced code block', {
         ref: 'nonexistent-id',
       })
 
+      // Should still render with prompt button using current code only
       expect(html).toContain('https://github.com/copilot?prompt=')
       expect(html).toContain('Improve%20the%20variable%20names%20in%20this%20function')
+      // Should NOT contain any referenced code since none was found
       expect(html).not.toContain('function%20logPersonsAge')
+      // Should have standard aria-label (not context version)
       expect(html).toContain('aria-label="Run this prompt in Copilot Chat"')
+      // Should not crash or fail
       expect(html).toContain('code-example')
 
       mockWarn.mockClear()
@@ -143,6 +169,7 @@ function test() {}
 
       const html = await renderContent(markdown)
 
+      // Should NOT wrap in code-example div (annotated blocks are excluded)
       expect(html).not.toContain('code-example')
     })
 
@@ -151,6 +178,7 @@ function test() {}
 
       const html = await renderContent(markdown)
 
+      // Should render with copy button
       expect(html).toContain('code-example')
       expect(html).toContain('js-btn-copy')
       expect(html).toContain('language-javascript')
@@ -163,6 +191,7 @@ function test() {}
 
       const html = await renderContent(markdown)
 
+      // Should encode quotes and ampersands properly
       expect(html).toContain('%22quotes%22')
       expect(html).toContain('%26%20symbols')
     })
@@ -175,6 +204,7 @@ This is line 2
 
       const html = await renderContent(markdown)
 
+      // Should encode newlines properly
       expect(html).toContain('This%20is%20line%201%0AThis%20is%20line%202')
     })
   })

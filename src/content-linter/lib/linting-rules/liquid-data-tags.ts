@@ -12,6 +12,10 @@ import {
 
 import type { RuleParams, RuleErrorCallback } from '@/content-linter/types'
 
+/*
+  Checks for instances where a Liquid data or indented_data_reference
+  tag is used but is not defined.
+*/
 export const liquidDataReferencesDefined = {
   names: ['GHD014', 'liquid-data-references-defined'],
   description:
@@ -27,7 +31,10 @@ export const liquidDataReferencesDefined = {
     if (!tokens.length) return
 
     for (const token of tokens) {
-      // indented_data_reference has path and indentation args; validate only the data path.
+      // When the liquid tag is indented_data_reference, there are
+      // two arguments: the path in the data directory and the number
+      // of spaces to indent. We only want the first argument to
+      // validate if the data reference is defined.
       const dataDirectoryReference = token.args.split(/\s+/)[0]
       if (hasData(dataDirectoryReference)) continue
 
@@ -60,12 +67,17 @@ export const liquidDataTagFormat = {
     const indentedDataTags = tokenTags.filter((token) => token.name === 'indented_data_reference')
 
     for (const token of dataTags) {
-      // A data tag accepts only the data directory path.
+      // A data tag has only one argument, the data directory path.
       const args = token.args.split(/\s+/)
-      // split() returns [''] for an empty string with a non-empty separator.
+      // When the string is empty and a non-empty separator is specified,
+      // split() returns [''], so we need to check for that case.
       if (args.length === 1 && token.args !== '') continue
 
-      // Bad data tags can leave tag delimiters inside args, which breaks position data.
+      // When we filter out the data tokens from getLiquidTokens, we are left with the data content itself
+      // without the liquid opening/closing tags. If we see that it is in the args of the token, we can
+      // assume that the data tag is not formatted correctly.
+      // This is not necessary as the liquid tests will later catch badly formatted liquid, but badly
+      // formatted data tags prevents getting the correct position data for the test below.
       const containsBadLiquidDataTags = CHECK_LIQUID_TAGS.some((tag) => token.args.includes(tag))
 
       if (containsBadLiquidDataTags) {
@@ -95,7 +107,9 @@ export const liquidDataTagFormat = {
     }
 
     for (const token of indentedDataTags) {
-      // indented_data_reference requires a path and a spaces argument.
+      // When the liquid tag is indented_data_reference, there are
+      // two arguments: the path in the data directory and the number
+      // of spaces to indent.
       const args = token.args.split(/\s+/)
       const isSpacesArgOk = /^spaces=\d{1,2}$/.test(args[1])
       if (args.length === 2 && isSpacesArgOk) continue
@@ -115,12 +129,14 @@ export const liquidDataTagFormat = {
   },
 }
 
-// Linting always checks English content.
+// Convenient wrapper because linting is always about English content
 const getData = (liquidRef: string) => getDataByLanguage(liquidRef, 'en')
 
 const hasData = (liquidRef: string): boolean => {
   try {
-    // Missing refs return undefined; malformed refs such as {% data reus.foo %} throw.
+    // If a reusable contains a nonexistent data reference, it will
+    // return undefined. If the data reference is inherently broken
+    // (e.g., {% data reus.foo %}), it will throw an error.
     const data = getData(liquidRef)
     return data !== undefined
   } catch {

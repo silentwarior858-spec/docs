@@ -1,7 +1,7 @@
 version: 2
 
 registries:
-  ghcr:
+  ghcr: # Define access for a private registry
     type: docker-registry
     url: ghcr.io
     username: PAT
@@ -16,7 +16,7 @@ updates:
     cooldown:
       default-days: 7
     ignore:
-      # Keep the Elasticsearch client pinned to the server-compatible version.
+      # Because this is so dependent on the remote server we use
       - dependency-name: '@elastic/elasticsearch'
       - dependency-name: '*'
         update-types:
@@ -42,9 +42,7 @@ updates:
   - package-ecosystem: 'docker'
     registries:
       - ghcr
-    directories:
-      - '/'
-      - '/.devcontainer'
+    directory: '/'
     schedule:
       interval: daily
     cooldown:
@@ -54,4 +52,4 @@ updates:
         patterns:
           - '*'
     ignore:
-      - dependency-name: 'node' # Ignore Dockerfile.openapi_decorator's Node image.
+      - dependency-name: 'node' # Ignore Dockerfile.openapi_decorator

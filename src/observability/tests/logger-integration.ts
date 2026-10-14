@@ -3,11 +3,13 @@ import type { Request, Response } from 'express'
 import { createLogger } from '@/observability/logger'
 import { initLoggerContext, updateLoggerContext } from '@/observability/logger/lib/logger-context'
 
+// Strip ANSI escape codes for easier assertion matching
 function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/\[\d+m/g, '')
 }
 
+// Check that a dev-mode log line contains the expected level and message
 function expectDevLog(logs: string[], level: string, message: string): void {
   const match = logs.find((log) => {
     const clean = stripAnsi(log)
@@ -16,6 +18,7 @@ function expectDevLog(logs: string[], level: string, message: string): void {
   expect(match, `Expected a log containing "${level}" and "${message}"`).toBeDefined()
 }
 
+// Integration tests that use real dependencies without mocks
 describe('logger integration tests', () => {
   let originalConsoleLog: typeof console.log
   let originalConsoleError: typeof console.error
@@ -24,10 +27,12 @@ describe('logger integration tests', () => {
   const consoleErrors: unknown[] = []
 
   beforeEach(() => {
+    // Store original console methods and environment
     originalConsoleLog = console.log
     originalConsoleError = console.error
     originalEnv = { ...process.env }
 
+    // Mock console methods to capture output
     console.log = vi.fn((message: string) => {
       consoleLogs.push(message)
     })
@@ -35,20 +40,24 @@ describe('logger integration tests', () => {
       consoleErrors.push(error)
     })
 
+    // Clear captured output
     consoleLogs.length = 0
     consoleErrors.length = 0
   })
 
   afterEach(() => {
+    // Restore original console methods and environment
     console.log = originalConsoleLog
     console.error = originalConsoleError
     process.env = originalEnv
 
+    // Clear all mocks
     vi.clearAllMocks()
   })
 
   describe('logger context integration', () => {
     it('should use empty context when no async local storage is set', () => {
+      // Set production mode to see the context in the output
       vi.stubEnv('LOG_LIKE_PRODUCTION', 'true')
       vi.stubEnv('NODE_ENV', 'development')
 
@@ -58,6 +67,8 @@ describe('logger integration tests', () => {
       expect(consoleLogs).toHaveLength(1)
       const logOutput = consoleLogs[0]
 
+      // Real getLoggerContext returns empty strings for fields when no context is set
+      // The logfmt output should include the basic fields
       expect(logOutput).toContain('level=info')
       expect(logOutput).toContain('message="Test without context"')
       expect(logOutput).toContain('timestamp=')
@@ -65,11 +76,14 @@ describe('logger integration tests', () => {
     })
 
     it('should use context from async local storage when available', async () => {
+      // Set production mode to see the context in the output
       vi.stubEnv('LOG_LIKE_PRODUCTION', 'true')
       vi.stubEnv('NODE_ENV', 'development')
 
+      // Clear console logs before running the async context
       consoleLogs.length = 0
 
+      // Create mock request and response objects that match what Express would provide
       const mockReq = {
         path: '/real/path',
         method: 'POST',
@@ -84,9 +98,12 @@ describe('logger integration tests', () => {
 
       const mockRes = {} as unknown as Response
 
+      // Use a Promise to handle the async local storage execution
       const result = await new Promise<void>((resolve, reject) => {
+        // Create a next function that will execute our test logic within the async context
         const mockNext = () => {
           try {
+            // Update the context with additional values (simulating subsequent middleware)
             updateLoggerContext({
               language: 'es',
               userLanguage: 'es',
@@ -94,12 +111,16 @@ describe('logger integration tests', () => {
               version: 'v1',
             })
 
+            // Now create and use the logger within the async context
             const logger = createLogger('file:///path/to/test.js')
             logger.info('Test with real context')
 
+            // Verify the output within the async context
             expect(consoleLogs).toHaveLength(1)
             const logOutput = consoleLogs[0]
 
+            // Should have the actual context values
+            // Check that requestUuid matches a crypto.randomUUID() format
             expect(logOutput).toMatch(
               /requestUuid=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,
             )
@@ -114,6 +135,7 @@ describe('logger integration tests', () => {
           }
         }
 
+        // Initialize the logger context and execute the test within the async context
         initLoggerContext(mockReq, mockRes, mockNext)
       })
 
@@ -123,9 +145,11 @@ describe('logger integration tests', () => {
 
   describe('log levels integration', () => {
     it('should use real log level filtering with explicit LOG_LEVEL=info', () => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
 
+      // Set explicit log level to 'info' and development mode for readable logs
       vi.stubEnv('LOG_LEVEL', 'info')
       vi.stubEnv('NODE_ENV', 'development')
       vi.stubEnv('LOG_LIKE_PRODUCTION', '')
@@ -137,7 +161,7 @@ describe('logger integration tests', () => {
       logger.warn('Warn message')
       logger.error('Error message')
 
-      // LOG_LEVEL numbers increase with verbosity, so debug 3 is filtered by info 2.
+      // With 'info' level, debug should be filtered out (debug=3, info=2, so debug > info)
       const allClean = consoleLogs.map(stripAnsi).join('\n')
       expect(allClean).not.toContain('Debug message')
       expectDevLog(consoleLogs, 'INFO', 'Info message')
@@ -146,9 +170,11 @@ describe('logger integration tests', () => {
     })
 
     it('should use real log level filtering with explicit LOG_LEVEL=error', () => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
 
+      // Set explicit log level to 'error' and development mode for readable logs
       vi.stubEnv('LOG_LEVEL', 'error')
       vi.stubEnv('NODE_ENV', 'development')
       vi.stubEnv('LOG_LIKE_PRODUCTION', '')
@@ -160,7 +186,7 @@ describe('logger integration tests', () => {
       logger.warn('Warn message')
       logger.error('Error message')
 
-      // error 0 filters every higher-verbosity level.
+      // With 'error' level (0), only error should be logged
       const allClean = consoleLogs.map(stripAnsi).join('\n')
       expect(allClean).not.toContain('Debug message')
       expect(allClean).not.toContain('Info message')
@@ -169,9 +195,11 @@ describe('logger integration tests', () => {
     })
 
     it('should use real production logging detection with LOG_LIKE_PRODUCTION=true', () => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
 
+      // Test LOG_LIKE_PRODUCTION=true
       vi.stubEnv('LOG_LIKE_PRODUCTION', 'true')
       vi.stubEnv('NODE_ENV', 'development')
 
@@ -181,19 +209,21 @@ describe('logger integration tests', () => {
       expect(consoleLogs).toHaveLength(1)
       const logOutput = consoleLogs[0]
 
+      // Should be in logfmt format (production-like)
       expect(logOutput).toContain('level=info')
       expect(logOutput).toContain('message="Production-like logging test"')
       expect(logOutput).toContain('timestamp=')
     })
 
     it('should use real production logging in production environment', () => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
 
-      // CI disables production logging unless LOG_LIKE_PRODUCTION is true.
+      // Test NODE_ENV=production (but not in CI)
       vi.stubEnv('NODE_ENV', 'production')
-      vi.stubEnv('CI', '')
-      vi.stubEnv('LOG_LIKE_PRODUCTION', '')
+      vi.stubEnv('CI', '') // Ensure CI is not set
+      vi.stubEnv('LOG_LIKE_PRODUCTION', '') // Clear this to test production detection
 
       const logger = createLogger('file:///path/to/test.js')
       logger.info('Real production logging test')
@@ -201,15 +231,18 @@ describe('logger integration tests', () => {
       expect(consoleLogs).toHaveLength(1)
       const logOutput = consoleLogs[0]
 
+      // Should be in logfmt format (production)
       expect(logOutput).toContain('level=info')
       expect(logOutput).toContain('message="Real production logging test"')
       expect(logOutput).toContain('timestamp=')
     })
 
     it('should use development logging format when production logging is disabled', () => {
+      // Clear console logs before each test
       consoleLogs.length = 0
       consoleErrors.length = 0
 
+      // Test development environment without LOG_LIKE_PRODUCTION
       vi.stubEnv('NODE_ENV', 'development')
       vi.stubEnv('LOG_LIKE_PRODUCTION', '')
       vi.stubEnv('CI', '')
@@ -219,6 +252,7 @@ describe('logger integration tests', () => {
 
       expect(consoleLogs).toHaveLength(1)
 
+      // Should be in development format (not logfmt)
       expectDevLog(consoleLogs, 'INFO', 'Development logging test')
       const logOutput = stripAnsi(consoleLogs[0])
       expect(logOutput).not.toContain('level=info')

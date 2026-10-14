@@ -10,7 +10,9 @@ import { getSearchFromRequestParams } from '@/search/lib/search-request-params/g
 import { handleGetSearchResultsError } from '@/search/middleware/search-routes'
 
 export async function aiSearchAutocompleteRoute(req: Request, res: Response) {
-  // force lets empty autocomplete queries bypass validation and return popular terms.
+  // If no query is provided, we want to return the top 5 most popular terms
+  // This is a special case for AI search autocomplete
+  // So we use `force` to allow the query to be empty without the usual validation error
   const force: { query?: string } = {}
   if (!req.query.query) {
     force.query = ''

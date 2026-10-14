@@ -9,6 +9,8 @@ category:
   - Create pull requests
 ---
 
+{% data reusables.public-preview.public-preview %}
+
 ## About stacked pull requests
 
 Stacked pull requests are two or more pull requests in the same repository, where:

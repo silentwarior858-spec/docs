@@ -10,8 +10,7 @@ category:
   - Understand product costs
 ---
 
-> [!NOTE]
-> {% data reusables.cli.public-preview-cloud-sandbox %}
+{% data reusables.cli.public-preview-sandbox %}
 
 ## How sandbox usage is measured
 

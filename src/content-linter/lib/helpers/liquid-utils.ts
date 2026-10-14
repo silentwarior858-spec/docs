@@ -3,8 +3,10 @@ import type { TopLevelToken, TagToken } from 'liquidjs'
 
 import { deprecated } from '@/versions/lib/enterprise-server-releases'
 
+// Cache for liquid tokens to improve performance
 const liquidTokenCache = new Map<string, TopLevelToken[]>()
 
+// Returns TopLevelToken array from liquidjs which is a union of TagToken, OutputToken, and HTMLToken
 export function getLiquidTokens(
   content: string,
   { noCache = false }: { noCache?: boolean } = {},
@@ -31,14 +33,18 @@ export const OUTPUT_CLOSE = '%}'
 
 export const conditionalTags = ['if', 'elseif', 'unless', 'case', 'ifversion']
 
+// Token parameter uses TopLevelToken which has begin and end properties
 export function getPositionData(
   token: TopLevelToken,
   lines: string[],
 ): { lineNumber: number; column: number; length: number } {
-  // Liquid offsets are 0-based, but markdownlint reports 1-based positions.
+  // Liquid indexes are 0-based, but we want to
+  // covert to the system used by Markdownlint
   const begin = token.begin + 1
   const end = token.end + 1
-  // Add one character per newline because lines exclude newline characters.
+  // Account for the newline character at the end
+  // of each line that is not represented in the
+  // `lines` array
   const lineLengths = lines.map((line) => line.length + 1)
 
   let count = begin
@@ -51,9 +57,19 @@ export function getPositionData(
   return { lineNumber, column: count, length: end - begin }
 }
 
-// ifversion statements whose tags and content are deleted together need markdownlint
-// delete ranges for each touched line.
-// Example: {% ifversion < 1.0 %}This is removed{% endif %}.
+/* When looking for unused Liquid `ifversion` tags, there
+ * are a few ways content can be updated to remove
+ * deprecated conditional statements. This function is
+ * specific to tags in a statement that are removed along
+ * with the content in the statement. For example:
+ *
+ * {% ifversion < 1.0 %}This is removed{% endif %}
+ *
+ * Returns an array of error objects in the format expected
+ * by Markdownlint:
+ * [ { lineNumber: 1, column: 1, deleteCount: 3, }]
+ */
+// Token parameter uses TopLevelToken from liquidjs
 export function getContentDeleteData(
   token: TopLevelToken,
   tokenEnd: number,
@@ -62,7 +78,8 @@ export function getContentDeleteData(
   const { lineNumber, column } = getPositionData(token, lines)
   const errorInfo: Array<{ lineNumber: number; column: number; deleteCount: number }> = []
   let begin = column - 1
-  // tokenEnd is the next tag's start, except an endif uses its own end.
+  // Subtract one from end of next token tag. The end of the
+  // current tag is one position before that.
   const length = tokenEnd - token.begin
 
   if (lines[lineNumber - 1].slice(begin).length >= length) {
@@ -93,9 +110,14 @@ export function getContentDeleteData(
   return errorInfo
 }
 
-// Docs versioning reads ifversion tags, so skip regular if subtrees and case statements.
+// This function returns all ifversion conditional statement tags
+// and filters out any `if` conditional statements (including the
+// related elsif, else, and endif tags).
+// Docs doesn't use the standard `if` tag for versioning, instead the
+// `ifversion` tag is used.
+// Returns TagToken array since we filter to only Tag tokens
 export function getLiquidIfVersionTokens(content: string): TagToken[] {
-  // Include case and endcase so else tags inside case statements do not look like ifversion tags.
+  // Include 'case' and 'endcase' so we can filter out `else` tags that belong to case statements
   const IFVERSION_TAG_NAMES = ['if', 'ifversion', 'elsif', 'else', 'endif', 'case', 'endcase']
   const tokens = getLiquidTokens(content)
     .filter((token): token is TagToken => token.kind === TokenKind.Tag)
@@ -105,12 +127,13 @@ export function getLiquidIfVersionTokens(content: string): TagToken[] {
   let inCaseStatement = false
   const ifVersionTokens: TagToken[] = []
   for (const token of tokens) {
-    // Skip regular if statements and their related tags, including nested ones.
+    // Filter out `if` statements and their related tags (supports nesting)
     if (token.name === 'if') {
       ifDepth++
       continue
     }
-    // A regular if subtree can contain ifversion tags, and endif can close either one.
+    // While we're inside a regular if subtree, `endif` can close either
+    // `if` or `ifversion`, so count nested `ifversion` tags too.
     if (ifDepth > 0 && token.name === 'ifversion') {
       ifDepth++
       continue
@@ -120,7 +143,7 @@ export function getLiquidIfVersionTokens(content: string): TagToken[] {
       continue
     }
     if (ifDepth > 0) continue
-    // Skip case statements and their related tags, including else.
+    // Filter out `case` statements and their related tags (including `else`)
     if (token.name === 'case') {
       inCaseStatement = true
       continue
@@ -136,17 +159,24 @@ export function getLiquidIfVersionTokens(content: string): TagToken[] {
 }
 
 export function getSimplifiedSemverRange(release: string): string {
-  // Liquid conditionals use > and <, so only the lower bound needs deprecation checks.
+  // Liquid conditionals only use the format > or < but not
+  // >= or <=. Not sure exactly why.
+  // if startswith >, we'll check to see if the release number
+  // is in the deprecated list, meaning the > case can be removed
+  // or changed to '*'.
   const releaseStrings = release.split(' ')
   const releaseToCheckIndex = releaseStrings.indexOf('>') + 1
   const releaseToCheck = releaseStrings[releaseToCheckIndex]
 
-  // A deprecated single lower bound covers all GHES releases, so return *.
+  // If the release is not part of a range and the release number
+  // is deprecated, return '*' to indicate all ghes releases.
   if (deprecated.includes(releaseToCheck) && releaseStrings.length === 2) {
     return '*'
   }
 
-  // If the lower bound in a range, such as ghes > 3.12, is deprecated, remove it.
+  // When the release is a range and the lower range (e.g., `ghes > 3.12`)
+  // is now deprecated, return an empty string.
+  // Otherwise, return the release as-is.
   const newRelease = deprecated.includes(releaseToCheck)
     ? release.replace(`> ${releaseToCheck}`, '')
     : release

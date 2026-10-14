@@ -1,7 +1,10 @@
-// Keep this separate from config.json because client React components need static imports
-// while REST sync scripts need writable JSON config.
+// This separate file from config.json was necessary in order to load
+// static information into our client-side React components. But,
+// we also need a JSON file to have a format with static data that can be
+// written to automatically. The sync scripts for REST update information
+// in the JSON file.
 
-// Keep these paths matching src/pages/[versionId]/rest.
+// These paths must match the paths in src/pages/[versionId]/rest
 export const nonAutomatedRestPaths: readonly string[] = [
   '/rest/quickstart',
   '/rest/about-the-rest-api',
@@ -10,5 +13,7 @@ export const nonAutomatedRestPaths: readonly string[] = [
   '/rest/guides',
 ] as const
 
-// ApiVersionPicker links here to explain REST API versioning.
+// This path is used to set the page in the
+// src/rest/components/ApiVersionPicker.tsx component. That component
+// has a link to the page that describes what api versioning is.
 export const apiVersionPath: string = '/rest/about-the-rest-api/api-versions'

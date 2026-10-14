@@ -18,7 +18,6 @@ children:
   - /about-the-rest-api
   - /actions
   - /authentication
-  - /releases
 
 ---
 

@@ -1,5 +1,15 @@
-// Validates asset files for corrupt images, unsafe SVG content, and mismatched file types.
-// For example, screenshot.png must contain image/png data.
+// [start-readme]
+//
+// Makes sure that all the image assets in `assets/` are safe.
+//
+// Generally writers don't check in bogus/corrupt images but mistakes
+// can happen and it's ideally spotted in other processes such as
+// reviewing PR review environment.
+// This script also makes sure that all images really are what they're
+// called. For example, an image might be named `screenshot.png` but
+// it might actually be something mischievous.
+//
+// [end-readme]
 
 import fs from 'fs/promises'
 import path from 'path'
@@ -14,11 +24,12 @@ import isSVG from 'is-svg'
 const ASSETS_ROOT = path.resolve('assets')
 const ROOT = path.dirname(ASSETS_ROOT)
 
-// React component images live under assets but are not content-contributed.
+// We put images that are used by the React components in with the assets
+// directory. These aren't really content-contibuted.
 const EXCLUDE_DIR = path.join(ASSETS_ROOT, 'images', 'site')
 
 const IGNORE_EXTENSIONS = new Set([
-  // CSV assets have no validator.
+  // Currently has no known test for these
   '.csv',
 ])
 
@@ -94,7 +105,7 @@ async function checkFile(filePath: string) {
   }
 
   if (ext === '.svg') {
-    // fileTypeFromFile cannot validate SVG, so parse the text content.
+    // Can't use `fileTypeFromFile` so have to check "manually"
     const content = await fs.readFile(filePath, 'utf-8')
     if (!content.trim()) {
       return [CRITICAL, filePath, 'file is empty']
@@ -122,6 +133,8 @@ async function checkFile(filePath: string) {
   } else {
     return [WARNING, filePath, `Don't know how to validate '${ext}'`]
   }
+
+  // All is well. Nothing to complain about.
 }
 
 function checkSVGContent(content: string) {
@@ -135,7 +148,10 @@ function checkSVGContent(content: string) {
       throw new Error(`contains a <${tagName}> tag`)
     }
     for (const key in 'attribs' in el ? el.attribs : {}) {
-      // Cheerio lowercases names, so this catches event handlers such as oNload case-insensitively.
+      // Looks for suspicious event handlers on tags.
+      // For example `<path oNload="alert(1)"" d="M28 0l4.59 4.59-9.76`
+      // We don't need to do a case-sensitive regex here because cheerio
+      // will have normalized all the element attribute keys to lowercase.
       if (/(\\x[a-f0-9]{2}|\b)on\w+/.test(key)) {
         throw new Error(`<${tagName}> contains an unsafe attribute: '${key}'`)
       }

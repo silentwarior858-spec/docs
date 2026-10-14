@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import { mkdirp } from 'mkdirp'
 import {
   ALL_KIND_KEYS,
   CATEGORIES,
@@ -9,12 +10,15 @@ import {
   type SchemaKindKey,
 } from '@/graphql/lib/categories'
 
-// Keep this loose so bucket-by-category does not import every process-schemas interface.
+// Item shape from process-schemas; we only need the `category` field here so
+// we keep this loose to avoid pulling all the precise interfaces.
 type CategorizedItem = { category?: string; name?: string; id?: string }
 
 export type CategoryBuckets = Map<string, Partial<Record<SchemaKindKey, CategorizedItem[]>>>
 
-// Example: /graphql/reference/objects#repository captures url kind objects and id repository.
+// Matches the legacy href format that process-schemas emits, e.g.
+// `/graphql/reference/objects#repository`. Captures the url-kind segment
+// and the id so the bucketer can rewrite into the category-aware form.
 const LEGACY_HREF_RE = /^\/graphql\/reference\/([a-z][a-z-]*)#([a-z0-9-]+)$/
 
 type CategoryLookup = Map<string, Map<string, string>>
@@ -43,7 +47,10 @@ function rewriteHref(href: string, lookup: CategoryLookup): string {
   return `/graphql/reference/${category}#${slugPrefixForUrlKind(urlKind)}-${id}`
 }
 
-// rewriteHrefsInPlace mutates processed items so category files link to sibling files.
+// Walk a processed item recursively, rewriting any string value that looks
+// like a legacy `/graphql/reference/<urlKind>#<id>` href into the
+// category-aware form. Mutates in place; the monolithic schema.json has
+// already been written to disk before this runs.
 function rewriteHrefsInPlace(value: unknown, lookup: CategoryLookup): void {
   if (Array.isArray(value)) {
     for (const v of value) rewriteHrefsInPlace(v, lookup)
@@ -62,6 +69,9 @@ function rewriteHrefsInPlace(value: unknown, lookup: CategoryLookup): void {
   }
 }
 
+// Group a processed schema (one big `{queries, mutations, ...}` object) into
+// one bucket per category. Each bucket only contains the kinds that have
+// items in that category.
 export function bucketSchemaByCategory(
   schema: Record<SchemaKindKey, CategorizedItem[]>,
 ): CategoryBuckets {
@@ -80,7 +90,12 @@ export function bucketSchemaByCategory(
     }
   }
 
-  // Rewriting happens after buckets exist, so hrefs can point to sibling category files.
+  // After grouping, rewrite cross-reference hrefs from the legacy
+  // `/graphql/reference/<urlKind>#<id>` form into the category-aware
+  // `/graphql/reference/<category>#<kindPrefix>-<id>` form so per-category
+  // files link to their sibling files. The monolithic `schema.json` is
+  // serialized to disk before this runs (see sync.ts), so it keeps the
+  // legacy hrefs the existing runtime expects.
   const lookup = buildCategoryLookup(buckets)
   for (const bucket of buckets.values()) {
     rewriteHrefsInPlace(bucket, lookup)
@@ -89,10 +104,13 @@ export function bucketSchemaByCategory(
   return buckets
 }
 
-// Emit every schema-<category>.json file so the loader never stats missing categories.
+// Write `schema-<category>.json` files into `dir`. Categories with no items
+// for this version get an empty file so the loader has a deterministic file
+// to consume (rather than relying on filesystem stat).
 export async function writeCategoryFiles(dir: string, buckets: CategoryBuckets): Promise<void> {
-  await fs.mkdir(dir, { recursive: true })
-  // Remove schema-*.json files before writing, so categories with no items keep no data.
+  await mkdirp(dir)
+  // First, delete any stale schema-*.json files so a category that becomes
+  // empty in a new sync doesn't leave behind a stale file.
   let existing: string[] = []
   try {
     existing = await fs.readdir(dir)
@@ -104,7 +122,7 @@ export async function writeCategoryFiles(dir: string, buckets: CategoryBuckets):
       try {
         await fs.unlink(path.join(dir, file))
       } catch {
-        // Keep writing other category files if one stale file cannot be removed.
+        // ignore
       }
     }
   }
@@ -115,7 +133,8 @@ export async function writeCategoryFiles(dir: string, buckets: CategoryBuckets):
     await fs.writeFile(filepath, JSON.stringify(bucket, null, 2), 'utf8')
   }
 
-  // category-map.json shape is { [kindKey]: { [id]: category } } for GraphQL redirects.
+  // Also emit a small category-map.json used at runtime by the GraphQL
+  // category redirect middleware. Shape: { [kindKey]: { [id]: category } }
   const categoryMap: Partial<Record<SchemaKindKey, Record<string, string>>> = {}
   for (const kind of ALL_KIND_KEYS) {
     const byId: Record<string, string> = {}

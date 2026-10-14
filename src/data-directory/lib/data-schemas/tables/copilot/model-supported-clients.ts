@@ -1,3 +1,5 @@
+// This schema enforces the structure in model-supported-clients.yml
+
 const modelsSupportedClientsSchema = {
   type: 'object',
   additionalProperties: false,

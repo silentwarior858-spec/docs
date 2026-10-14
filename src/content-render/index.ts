@@ -15,12 +15,14 @@ interface RenderOptions {
 
 const globalCache = new Map<string, string>()
 
+// parse multiple times because some templates contain more templates. :]
 export async function renderContent(
   template = '',
   context: Context = {} as Context,
   options: RenderOptions = {},
 ): Promise<string> {
-  // Falsy templates cannot render into content, so skip Liquid and unified work.
+  // If called with a falsy template, it can't ever become something
+  // when rendered. We can exit early to save some pointless work.
   if (!template) return template
   let cacheKey: string | null = null
   if (options && options.cache) {
@@ -40,7 +42,8 @@ export async function renderContent(
   try {
     template = await renderLiquid(template, context)
     if (context.markdownRequested) {
-      // Skip remark without internal links; link rewriting is the only markdownRequested transformation.
+      // Skip the remark pipeline when there are no internal links to rewrite,
+      // since link rewriting is the only transformation the pipeline performs.
       if (!/\]\(\s*<?\//.test(template) && !/\]:\s*\//.test(template)) {
         return template.trim()
       }
@@ -64,10 +67,21 @@ function getDefaultCacheKey(template: string, context: Context): string {
   return `${template}:${context.currentVersion}:${context.currentLanguage}`
 }
 
-// render-page sends the hast tree through Next props so React can render the
-// article body without injecting the derived HTML string.
-// The same unified pass produces html and hast, so both outputs stay consistent.
-// renderContentToHast always produces HTML; use renderContent for markdown output.
+/**
+ * Like `renderContent`, but returns the hast (HTML AST) tree alongside the
+ * derived HTML string, both produced from a single unified pass. Used by the
+ * render-page boundary to thread a serializable AST to the React layer instead
+ * of an opaque HTML string, so React can render the body itself rather than
+ * injecting raw HTML (github/docs-engineering#6619).
+ *
+ * Does liquid first (same as renderContent), then runs the unified pipeline but
+ * stops before rehype-stringify. The `html` returned here is derived from the
+ * exact same tree, so it stays consistent with `hast`.
+ *
+ * Unlike `renderContent`, this does not support `context.markdownRequested`:
+ * the hast path always produces HTML. Callers that need markdown output should
+ * use `renderContent`.
+ */
 export async function renderContentToHast(
   template = '',
   context: Context = {} as Context,

@@ -14,6 +14,7 @@ export type HighlightFields = {
   [key in HighlightOptions]: HighlightConfig
 }
 
+// When we query Elasticsearch, we can specify a highlight configuration
 export function getHighlightConfiguration(
   query: string,
   highlightsFields: HighlightOptions[],
@@ -21,7 +22,9 @@ export function getHighlightConfiguration(
   const fields = {} as HighlightFields
   if (highlightsFields.includes('title')) {
     fields.title = {
-      // fvh requires term_vector: with_positions_offsets on the indexed field.
+      // Fast Vector Highlighter
+      // Using this requires that you first index these fields
+      // with {term_vector: 'with_positions_offsets'}
       type: 'fvh',
       fragment_size: 200,
       number_of_fragments: 1,
@@ -29,11 +32,13 @@ export function getHighlightConfiguration(
   }
   if (highlightsFields.includes('content')) {
     fields.content = {
-      // fvh requires term_vector: with_positions_offsets on the indexed field.
+      // Fast Vector Highlighter
+      // Using this requires that you first index these fields
+      // with {term_vector: 'with_positions_offsets'}
       type: 'fvh',
       fragment_size: 150,
       number_of_fragments: 1,
-      // Fallback snippets show text even when Elasticsearch finds no content highlight.
+      // So we can at least display something if there was no highlight match within the content.
       no_match_size: 150,
 
       highlight_query: {
@@ -45,7 +50,9 @@ export function getHighlightConfiguration(
       },
     }
     fields.content_explicit = {
-      // fvh requires term_vector: with_positions_offsets on the indexed field.
+      // Fast Vector Highlighter
+      // Using this requires that you first index these fields
+      // with {term_vector: 'with_positions_offsets'}
       type: 'fvh',
       fragment_size: 150,
       number_of_fragments: 1,
@@ -62,7 +69,9 @@ export function getHighlightConfiguration(
   }
   if (highlightsFields.includes('term')) {
     fields.term = {
-      // fvh requires term_vector: with_positions_offsets on the indexed field.
+      // Fast Vector Highlighter
+      // Using this requires that you first index these fields
+      // with {term_vector: 'with_positions_offsets'}
       type: 'fvh',
     }
   }

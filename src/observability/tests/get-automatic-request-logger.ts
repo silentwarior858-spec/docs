@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getAutomaticRequestLogger } from '@/observability/logger/middleware/get-automatic-request-logger'
 import type { Request, Response, NextFunction } from 'express'
 
+// Type alias for mock response with overridden end function
 type MockResponseWithEnd = Partial<Response> & { end: () => unknown }
 
 describe('getAutomaticRequestLogger', () => {
@@ -13,15 +14,19 @@ describe('getAutomaticRequestLogger', () => {
   let mockNext: NextFunction
 
   beforeEach(() => {
+    // Store original environment and console methods
     originalEnv = { ...process.env }
     originalConsoleLog = console.log
 
+    // Mock console.log to capture output
     console.log = vi.fn((message: string) => {
       consoleLogs.push(message)
     })
 
+    // Clear captured output
     consoleLogs.length = 0
 
+    // Set up mock request, response, and next function
     mockReq = {
       method: 'GET',
       url: '/test-path',
@@ -40,9 +45,11 @@ describe('getAutomaticRequestLogger', () => {
       end: originalEnd,
     }
 
+    // Override res.end to simulate response completion
     function endOverride(this: Response, chunk?: unknown, encoding?: unknown): Response {
       if (!responseEnded) {
         responseEnded = true
+        // Simulate a small delay for response time
         setTimeout(() => {
           originalEnd.call(this, chunk, encoding)
         }, 10)
@@ -63,6 +70,7 @@ describe('getAutomaticRequestLogger', () => {
   })
 
   afterEach(() => {
+    // Restore original environment and console methods
     process.env = originalEnv
     console.log = originalConsoleLog
     vi.clearAllMocks()
@@ -77,7 +85,10 @@ describe('getAutomaticRequestLogger', () => {
     it('should log requests in development format', async () => {
       const middleware = getAutomaticRequestLogger()
 
+      // Call middleware
       middleware(mockReq as Request, mockRes as Response, mockNext)
+
+      // Simulate response completion
       ;(mockRes as MockResponseWithEnd).end()
 
       // Wait for async logging
@@ -96,6 +107,7 @@ describe('getAutomaticRequestLogger', () => {
     })
 
     it('should apply color coding based on status codes', async () => {
+      // Test different status codes individually with completely isolated mocks
       const testCases = [
         { status: 200, expectedInLog: '200' },
         { status: 404, expectedInLog: '404' },
@@ -105,13 +117,16 @@ describe('getAutomaticRequestLogger', () => {
       for (let i = 0; i < testCases.length; i++) {
         const testCase = testCases[i]
 
+        // Create a completely isolated test environment for each iteration
         const isolatedLogs: string[] = []
         const savedConsoleLog = console.log
 
+        // Replace console.log with isolated capture
         console.log = vi.fn((message: string) => {
           isolatedLogs.push(message)
         })
 
+        // Create completely fresh request and response mocks
         const freshMockReq = {
           method: 'GET',
           url: '/test-path',
@@ -130,9 +145,11 @@ describe('getAutomaticRequestLogger', () => {
           end: originalEnd,
         }
 
+        // Override res.end to simulate response completion
         function endOverride(this: Response, chunk?: unknown, encoding?: unknown): Response {
           if (!responseEnded) {
             responseEnded = true
+            // Simulate a small delay for response time
             setTimeout(() => {
               originalEnd.call(this, chunk, encoding)
             }, 10)
@@ -159,6 +176,7 @@ describe('getAutomaticRequestLogger', () => {
           expect(isolatedLogs).toHaveLength(1)
           expect(isolatedLogs[0]).toContain(testCase.expectedInLog)
         } finally {
+          // Always restore console.log
           console.log = savedConsoleLog
         }
       }
@@ -176,7 +194,7 @@ describe('getAutomaticRequestLogger', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 20))
 
-      expect(consoleLogs).toHaveLength(0)
+      expect(consoleLogs).toHaveLength(0) // Should be filtered out
     })
 
     it('should log _next requests when debug level is set', async () => {
@@ -244,6 +262,7 @@ describe('getAutomaticRequestLogger', () => {
       expect(consoleLogs).toHaveLength(1)
 
       const logOutput = consoleLogs[0]
+      // Should include context fields (even if empty due to mocking)
       expect(logOutput).toContain('requestUuid=')
       expect(logOutput).toContain('path=')
     })
@@ -258,10 +277,12 @@ describe('getAutomaticRequestLogger', () => {
     })
 
     it('should not log in test environment by default', async () => {
+      // Be extremely explicit about the environment settings for CI
       vi.stubEnv('NODE_ENV', 'test')
       vi.stubEnv('ENABLE_DEV_LOGGING', '')
       vi.stubEnv('LOG_LIKE_PRODUCTION', '')
 
+      // Create isolated log capture for this specific test
       const isolatedLogs: string[] = []
       const savedConsoleLog = console.log
 
@@ -280,6 +301,7 @@ describe('getAutomaticRequestLogger', () => {
 
         expect(isolatedLogs).toHaveLength(0)
       } finally {
+        // Always restore console.log
         console.log = savedConsoleLog
       }
     })
@@ -312,7 +334,7 @@ describe('getAutomaticRequestLogger', () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
 
       expect(consoleLogs).toHaveLength(1)
-      expect(consoleLogs[0]).toContain('-')
+      expect(consoleLogs[0]).toContain('-') // Should show '-' for missing content length
     })
 
     it('should handle missing status code', async () => {
@@ -325,7 +347,7 @@ describe('getAutomaticRequestLogger', () => {
       await new Promise((resolve) => setTimeout(resolve, 20))
 
       expect(consoleLogs).toHaveLength(1)
-      expect(consoleLogs[0]).toContain('200')
+      expect(consoleLogs[0]).toContain('200') // Should default to 200
     })
 
     it('should prefer originalUrl over url', async () => {
@@ -349,6 +371,7 @@ describe('getAutomaticRequestLogger', () => {
       const startTime = Date.now()
       middleware(mockReq as Request, mockRes as Response, mockNext)
 
+      // Simulate some processing time
       await new Promise((resolve) => setTimeout(resolve, 50))
       ;(mockRes as MockResponseWithEnd).end()
       await new Promise((resolve) => setTimeout(resolve, 20))
@@ -358,12 +381,14 @@ describe('getAutomaticRequestLogger', () => {
 
       expect(consoleLogs).toHaveLength(1)
 
+      // Extract response time from log
       const logOutput = consoleLogs[0]
       const responseTimeMatch = logOutput.match(/(\d+)\s*ms/)
       expect(responseTimeMatch).toBeTruthy()
 
       if (responseTimeMatch) {
         const loggedTime = parseInt(responseTimeMatch[1], 10)
+        // Should be reasonably close to actual duration (within 20ms tolerance)
         expect(loggedTime).toBeGreaterThanOrEqual(40)
         expect(loggedTime).toBeLessThanOrEqual(actualDuration + 20)
       }
@@ -371,6 +396,7 @@ describe('getAutomaticRequestLogger', () => {
   })
 
   describe('pod identity fields in production logs', () => {
+    // Helper to build a minimal mock res/req and trigger res.end
     async function runMiddlewareAndCapture(
       middleware: ReturnType<
         typeof import('@/observability/logger/middleware/get-automatic-request-logger').getAutomaticRequestLogger

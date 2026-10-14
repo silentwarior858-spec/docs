@@ -1,5 +1,7 @@
-// matrix-meta.yml owns shared Copilot IDE matrix configuration.
-// Per-IDE data lives in data/tables/copilot/matrix/<ide>.yml and matrix-ide.ts validates it.
+// Schema for data/tables/copilot/matrix-meta.yml
+//
+// Shared configuration for the Copilot IDE feature matrix. Per-IDE data lives in
+// data/tables/copilot/matrix/<ide>.yml and is validated by matrix-ide.ts.
 
 const copilotMatrixMetaSchema = {
   type: 'object',

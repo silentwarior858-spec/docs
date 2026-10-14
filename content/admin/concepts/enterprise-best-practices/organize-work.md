@@ -17,8 +17,6 @@ redirect_from:
 allowTitleToDifferFromFilename: true
 category:
   - Get started with GitHub Enterprise
-docsTeamMetrics:
-  - enterprise-onboarding
 ---
 
 ## Use organizations for work or governance

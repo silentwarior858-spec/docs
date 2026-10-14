@@ -5,9 +5,7 @@ intro: Understand the results from your {% data variables.product.prodname_secre
 permissions: Organization owners, security managers, and users with the **admin** role
 allowTitleToDifferFromFilename: true
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: secret-risk-assessment
 contentType: tutorials
 redirect_from:
   - /code-security/securing-your-organization/understanding-your-organizations-exposure-to-leaked-secrets/interpreting-secret-risk-assessment-results

@@ -68,11 +68,11 @@ const noGenericLinkText = markdownlintGitHub.find((elem: { names: string[] }) =>
 
 export const gitHubDocsMarkdownlint = {
   rules: [
-    // markdownlint-github supplies the GH rule IDs.
+    // GH rules (markdownlint-github)
     noDefaultAltText, // GH001
     noGenericLinkText, // GH002
 
-    // Keep custom GitHub Docs rules in numerical order by GHD ID.
+    // GHD rules (GitHub Docs custom rules, in numerical order)
     linkPunctuation, // GHD001
     internalLinksNoLang, // GHD002
     internalLinksSlash, // GHD003
@@ -106,7 +106,7 @@ export const gitHubDocsMarkdownlint = {
     thirdPartyActionPinning, // GHD041
     liquidTagWhitespace, // GHD042
     linkQuotation, // GHD043
-    // GHD044 is absent because octicon aria-labels are auto-generated.
+    // GHD044 removed - octicon aria-labels are now auto-generated
     codeAnnotationCommentSpacing, // GHD045
     outdatedReleasePhaseTerminology, // GHD046
     tableColumnIntegrity, // GHD047
@@ -125,7 +125,7 @@ export const gitHubDocsMarkdownlint = {
     frontmatterDocsTeamMetrics, // GHD066
     frontmatterRestApiCategory, // GHD067
 
-    // markdownlint-rule-search-replace supplies this rule.
+    // Search-replace rules
     searchReplace, // Open-source plugin
   ],
 }

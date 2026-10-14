@@ -3,7 +3,9 @@
 |------------------|------------------- | ---------------
 | C/C++ | `c-cpp` | `c` or `cpp` |
 | C# | `csharp` |
-| {% data variables.product.prodname_actions %} workflows | `actions` |
+| {% ifversion code-scanning-actions-language %} |
+{% data variables.product.prodname_actions %} workflows | `actions`
+| {% endif %}
 | Go | `go` |
 | Java/Kotlin | `java-kotlin` | `java` or `kotlin` |
 | JavaScript/TypeScript | `javascript-typescript` | `javascript` or `typescript` |

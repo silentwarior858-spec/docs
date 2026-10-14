@@ -4,9 +4,7 @@ intro: Learn about issue types and how to manage them in your organization.
 redirect_from:
   - /issues/tracking-your-work-with-issues/configuring-issues/managing-issue-types-in-an-organization
 versions:
-  fpt: '*'
-  ghec: '*'
-  ghes: '*'
+  feature: issue-types
 shortTitle: Managing issue types
 permissions: Organization owners can modify issue types.
 contentType: concepts

@@ -15,10 +15,14 @@ export default async function createTree(
 ): Promise<UnversionedTree | undefined> {
   const basePath = rootPath || originalPath
 
-  // Recursive children arrive as /<link>; <path>.md wins over <path>/index.md.
+  // On recursive runs, this is processing page.children items in `/<link>` format.
+  // If the path exists as is, assume this is a directory with a child index.md.
+  // Otherwise, assume it's a child .md file and add `.md` to the path.
   let filepath: string
   let mtime: number
-  // Reading <path>.md first identifies file versus directory and captures its mtime.
+  // This kills two birds with one stone. We (attempt to) read it as a file,
+  // to find out if it's a directory or a file and whence we know that
+  // we also collect it's modification time.
   try {
     filepath = `${originalPath}.md`
     mtime = await getMtime(filepath)
@@ -27,14 +31,21 @@ export default async function createTree(
       throw error
     }
     filepath = `${originalPath}/index.md`
-    // If child index.md is missing, the thrown path points the writer to the bad children entry.
+    // Note, if this throws, that's quite fine. It usually means that
+    // there's a `index.md` whose `children:` entry lists something that
+    // doesn't exist on disk. So the writer who tries to review the
+    // page will see the error and it's hopefully clear what's actually
+    // wrong.
     try {
       mtime = await getMtime(filepath)
     } catch (innerError) {
       if ((innerError as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw innerError
       }
-      // Missing early-access content, including an uncloned repo, does not block unrelated PRs.
+      // Throw an error if we can't find a content file associated with the children: entry.
+      // But don't throw an error if the user is running the site locally and hasn't cloned the Early Access repo.
+      // Also don't throw for missing children *within* early-access content — a broken
+      // early-access article should not block every docs-internal PR from merging.
       const msg = `Cannot find a content file at ${originalPath}. Check the 'children' frontmatter in the parent index.md.`
 
       if (
@@ -50,13 +61,19 @@ export default async function createTree(
 
   const relativePath = filepath.replace(`${basePath}/`, '')
 
-  // Reuse the previous tree when mtime is unchanged because disk reads are slow.
+  // Reading in a file from disk is slow and best avoided if we can be
+  // certain it isn't necessary. If the previous tree is known and that
+  // tree's page node's `mtime` hasn't changed, we can use that instead.
   let page: Page
   if (previousTree && previousTree.page.mtime === mtime) {
-    // An unchanged source file keeps the previous Page instance valid.
+    // A save! We can use the same exact Page instance from the previous
+    // tree because the assumption is that since the `.md` file it was
+    // created from hasn't changed (on disk) the instance object wouldn't
+    // change.
     page = previousTree.page
   } else {
-    // Missing or stale previous trees need a freshly initialized Page.
+    // Either the previous tree doesn't exist yet or the modification time
+    // of the file on disk has changed.
     const newPage = await PageClass.init({
       basePath,
       relativePath,
@@ -68,13 +85,25 @@ export default async function createTree(
     page = newPage as unknown as Page
   }
 
+  // Create the root tree object on the first run, and create children recursively.
   const item: UnversionedTree = {
     page,
-    // Development reloads reuse subtrees only when the ordered children list matches.
+    // This is only here for the sake of reloading the tree later which
+    // only happens in development mode.
+    // The reloading of the tree compares the list of children (array of
+    // strings) with what it might have been in the previous tree.
+    // Then it can use the "n'th" access to figure out what the
+    // "previous sub tree" was for each child.
+    // So if a writer edits the 'children:' frontmatter property
+    // this value now will be different from what it was before.
+    // It's not enough to rely on *length* of the array before and after
+    // because the change could have been to remove one and add another.
+    // Page class has dynamic frontmatter properties like 'children' that aren't in the type definition
     children: page.children || [],
     childPages: [],
   }
 
+  // Process frontmatter children recursively.
   if (page.children) {
     assertUniqueChildren(page)
     item.childPages = (
@@ -83,18 +112,27 @@ export default async function createTree(
           let childPreviousTree: UnversionedTree | undefined
           if (previousTree && previousTree.childPages) {
             if (equalArray(page.children as string[], previousTree.children)) {
-              // Matching child names and order keep indexes tied to the same previous subtree.
+              // We can only safely rely on picking the same "n'th" item
+              // from the array if we're confident the names are the same
+              // as they were before.
+              // Otherwise, suppose you add an entry to `children:`
+              // and add another, then length would be the same but
+              // each position might relate to different child.
               childPreviousTree = previousTree.childPages[i]
             }
           }
 
-          // Absolute paths such as /content/actions/workflows pull a subtree, even from another product.
+          // Handle absolute /content/ paths - allows cross-product directory inclusion
+          // e.g., /content/actions/workflows will include the entire actions/workflows tree
           let childPath: string
           if (child.startsWith('/content/')) {
+            // Absolute content path - resolve from the content root
+            // Strip '/content/' prefix and join with the base content directory
             const absoluteChildPath = child.slice('/content/'.length)
             childPath = path.posix.join(basePath, absoluteChildPath)
 
-            // Reject path traversal by requiring the resolved path to stay under the content root.
+            // Security check: ensure the resolved path stays within the content directory
+            // This prevents path traversal attacks using sequences like '../'
             const resolvedPath = path.resolve(childPath)
             const resolvedBasePath = path.resolve(basePath)
             if (!resolvedPath.startsWith(resolvedBasePath + path.sep)) {
@@ -104,17 +142,23 @@ export default async function createTree(
               )
             }
           } else {
-            // Relative child paths resolve from their parent path.
+            // Traditional relative path
             childPath = path.posix.join(originalPath, child)
           }
 
           const subTree = await createTree(childPath, basePath, childPreviousTree)
           if (subTree && child.startsWith('/content/')) {
-            // Cross-product children stay out of the sidebar.
+            // Mark this subtree as a cross-product child so it can be excluded from the sidebar
             subTree.crossProductChild = true
           }
           if (!subTree) {
-            // Remove skipped subtrees so development reloads compare against the rendered child list.
+            // Remove that children.
+            // For example, the 'early-access' might have been in the
+            // `children:` property but it was decided to be skipped
+            // (early exit instead of returning a tree). So let's
+            // mutate the `page.children` so we can benefit from the
+            // ability to reload the site tree on consecutive requests.
+            // Page class has dynamic frontmatter properties like 'children' that aren't in the type definition
             ;(page.children as string[]) = (page.children as string[]).filter(
               (c: string) => c !== child,
             )
@@ -134,7 +178,7 @@ function equalArray(arr1: string[], arr2: string[]): boolean {
 
 async function getMtime(filePath: string): Promise<number> {
   if (isProduction) {
-    // Production skips the full stat but still verifies existence.
+    // In production, skip the full stat but still verify existence
     await fs.access(filePath)
     return 1
   }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { ArrowLeftIcon, ArrowRightIcon } from '@primer/octicons-react'
 import { Card } from '@primer/react-brand'
-import cx from 'clsx'
+import cx from 'classnames'
 import type { ResolvedArticle } from '@/types'
 import { useTranslation } from '@/languages/components/useTranslation'
 import { useVersion } from '@/versions/components/useVersion'
@@ -11,26 +11,25 @@ import { RenderedHTML } from '@/frame/components/ui/RenderedHTML/RenderedHTML'
 
 type LandingCarouselProps = {
   heading?: string
-  // Optional key for translation lookup, such as "recommended".
-  carouselKey?: string
+  carouselKey?: string // Optional key for translation lookup (e.g., "recommended")
   carouselArticles?: ResolvedArticle[]
 }
 
+// Hook to get current items per view based on screen size
 const useResponsiveItemsPerView = () => {
-  // Default to the desktop 3-column carousel.
-  const [itemsPerView, setItemsPerView] = useState(3)
+  const [itemsPerView, setItemsPerView] = useState(3) // Default to desktop
 
   useEffect(() => {
     const updateItemsPerView = () => {
       const width = window.innerWidth
       if (width < 768) {
-        // Mobile shows one column.
+        // Mobile: 1 column
         setItemsPerView(1)
       } else if (width < 1012) {
-        // Tablet shows two columns.
+        // Tablet: 2 columns
         setItemsPerView(2)
       } else {
-        // Desktop shows three columns.
+        // Desktop: 3 columns
         setItemsPerView(3)
       }
     }
@@ -55,10 +54,13 @@ export const LandingCarousel = ({
   const router = useRouter()
   const { currentVersion } = useVersion()
 
+  // Determine heading text
   let headingText = heading
   if (!headingText && carouselKey) {
+    // Try to get translation for the carousel key
     const translated = t(carouselKey)
 
+    // Check if we got a real translation or a fallback
     const looksLikeFallback = !translated || translated === carouselKey
 
     if (!looksLikeFallback) {
@@ -66,15 +68,17 @@ export const LandingCarousel = ({
     }
   }
 
+  // Ref to store timeout IDs for cleanup
   const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Viewport changes reset to the first page so the changed page count cannot strand the index.
+  // Reset to first page when itemsPerView changes (screen size changes)
   useEffect(() => {
     setCurrentPage(0)
   }, [itemsPerView])
 
   const processedItems: ResolvedArticle[] = carouselArticles || []
 
+  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (animationTimeoutRef.current) {
@@ -89,6 +93,7 @@ export const LandingCarousel = ({
   const goToPrevious = () => {
     if (currentPage === 0 || isAnimating) return
 
+    // Clear any existing timeout
     if (animationTimeoutRef.current) {
       clearTimeout(animationTimeoutRef.current)
     }
@@ -96,7 +101,8 @@ export const LandingCarousel = ({
     setIsAnimating(true)
     setCurrentPage((prev) => Math.max(0, prev - 1))
 
-    // Matches the --carousel-transition-duration CSS custom property.
+    // Set animation state to false after transition completes
+    // Duration matches CSS custom property --carousel-transition-duration (100ms)
     animationTimeoutRef.current = setTimeout(() => {
       setIsAnimating(false)
       animationTimeoutRef.current = null
@@ -106,6 +112,7 @@ export const LandingCarousel = ({
   const goToNext = () => {
     if (currentPage >= totalPages - 1 || isAnimating) return
 
+    // Clear any existing timeout
     if (animationTimeoutRef.current) {
       clearTimeout(animationTimeoutRef.current)
     }
@@ -113,13 +120,15 @@ export const LandingCarousel = ({
     setIsAnimating(true)
     setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1))
 
-    // Matches the --carousel-transition-duration CSS custom property.
+    // Set animation state to false after transition completes
+    // Duration matches CSS custom property --carousel-transition-duration (100ms)
     animationTimeoutRef.current = setTimeout(() => {
       setIsAnimating(false)
       animationTimeoutRef.current = null
     }, 100)
   }
 
+  // Calculate the start index based on current page
   const startIndex = currentPage * itemsPerView
   const visibleItems = processedItems.slice(startIndex, startIndex + itemsPerView)
 

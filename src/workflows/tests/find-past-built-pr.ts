@@ -18,6 +18,7 @@ interface FakeOptions {
   failCreateOn?: number[]
 }
 
+// Builds a minimal Octokit stand-in exposing only the methods the script uses.
 function makeFakeOctokit(options: FakeOptions = {}) {
   const { commitMessages = [], comments = {}, locked = {}, failCreateOn = [] } = options
 
@@ -45,7 +46,8 @@ function makeFakeOctokit(options: FakeOptions = {}) {
         createComment,
       },
     },
-    // The real Octokit paginate reads every page, but these fakes return one configured page.
+    // The real octokit.paginate pulls every page; our fakes are single-page, so
+    // resolve straight to the configured comment list.
     paginate: vi.fn(async (_method: unknown, params: { issue_number: number }) => {
       return comments[params.issue_number] || []
     }),
@@ -150,7 +152,7 @@ describe('commentOnDeployBatch', () => {
     await expect(
       commentOnDeployBatch(octokit, 'github', 'docs-internal', [5, 4, 3]),
     ).rejects.toThrow(/Failed to comment on 1 PR/)
-    // Successful PRs still get comments even when another PR comment fails.
+    // #5 and #3 still get their comments despite #4 failing.
     expect(createComment).toHaveBeenCalledTimes(3)
   })
 })
